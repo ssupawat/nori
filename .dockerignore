@@ -1,0 +1,9 @@
+.git
+data
+backups
+nori
+nori.exe
+tmp_dumpsize
+ui/node_modules
+*.md
+fly.toml

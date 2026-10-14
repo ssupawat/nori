@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nori - import a spreadsheet, get an API</title>
+<meta name="description" content="nori is a single-binary backend: import a spreadsheet and every sheet becomes a private table with a CRUD API, accounts, and an admin dashboard. Self-host it in one command.">
+<style>
+  :root{
+    --ink:#18181b; --paper:#ffffff; --muted:#71717a; --soft:#a1a1aa;
+    --faint:#fafafa; --well:#f4f4f5; --line:#e4e4e7;
+    --radius:14px; --max:920px; --pad:clamp(18px,4vw,32px);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  #bg{position:fixed;inset:0;z-index:-1}
+  body{
+    margin:0; color:var(--ink); background:var(--paper); line-height:1.6;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  }
+  a{color:inherit}
+  .wrap{max-width:var(--max);margin:0 auto;padding-left:var(--pad);padding-right:var(--pad)}
+  header.site{border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px var(--pad)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none}
+  nav.top{display:flex;gap:20px;font-size:14px}
+  nav.top a{text-decoration:none;color:var(--muted)}
+  nav.top a:hover{color:var(--ink)}
+  @media (max-width:640px){nav.top{display:none}}
+  .hero{min-height:calc(100vh - 54px);min-height:calc(100svh - 54px);
+    display:flex;align-items:center;padding:clamp(24px,4vw,48px) 0}
+  h1{font-size:clamp(32px,6vw,54px);line-height:1.12;letter-spacing:-0.02em;margin:0 0 14px}
+  .sub{font-size:clamp(16px,2vw,19px);color:var(--muted);margin:0 0 24px;max-width:56ch}
+  .ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;
+       padding:12px 20px;font-size:15px;font-weight:600;text-decoration:none}
+  .btn.primary{background:var(--brand,#18181b);color:var(--brand-on,#fff)}
+  .btn.primary:hover{filter:brightness(1.35)}
+  .friction{font-size:13px;color:var(--soft);margin-top:10px}
+  .ctas .friction{margin:0}
+  .swatchline{display:flex;align-items:center;gap:10px;margin-top:16px;font-size:13px;color:var(--soft)}
+  .swatches{display:flex;gap:8px}
+  .swatch{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);cursor:pointer;padding:0}
+  .swatch[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:2px}
+  section{padding:clamp(28px,5vw,52px) 0;border-top:1px solid var(--line)}
+  h2{font-size:clamp(21px,3vw,27px);margin:0 0 10px}
+  .lede{color:var(--muted);margin:0 0 26px;max-width:56ch}
+  .spectrum{position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;
+    gap:16px;margin:6px 0 8px}
+  .spectrum .track{position:absolute;top:9px;height:2px;
+    left:calc(16.6667% + 2px);right:calc(16.6667% + 2px);background:var(--line)}
+  .stop{position:relative;text-align:center;padding:0 10px}
+  .stop .verb{display:block;margin-top:10px}
+  .stop .dot{display:inline-block;width:16px;height:16px;border-radius:50%;
+    border:2px solid var(--ink);background:var(--paper);position:relative;z-index:1}
+  .stop h3{margin:10px 0 4px;font-size:16px}
+  .stop p{margin:0;font-size:14px;color:var(--muted)}
+  .stop.hl .dot{background:var(--ink);width:22px;height:22px;margin-top:-3px}
+  @media (max-width:760px){
+    .spectrum{grid-template-columns:1fr;row-gap:26px;padding-left:34px}
+    .spectrum .track{top:8px;bottom:8px;left:9px;right:auto;width:2px;height:auto}
+    .stop{text-align:left;padding:0}
+    .stop .dot{position:absolute;left:-32px;top:3px}
+    .stop.hl .dot{left:-33px}
+  }
+  .verb{font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--soft)}
+  ol.steps{counter-reset:step;list-style:none;margin:0;padding:0;display:grid;gap:14px}
+  ol.steps li{counter-increment:step;border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
+  ol.steps li::before{content:counter(step,decimal-leading-zero);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:13px;color:var(--soft);display:block;margin-bottom:4px}
+  ol.steps b{font-size:16px}
+  ol.steps p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+  pre.code{background:var(--well);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:13.5px;overflow-x:auto;line-height:1.7;margin:0 0 10px}
+  pre.code .c{color:var(--soft)}
+  .facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin:14px 0 0;padding:0;list-style:none;
+    font-size:13px;color:var(--muted)}
+  .facts b{color:var(--ink)}
+  .story{display:grid;grid-template-columns:1.2fr 30px 1fr;gap:14px;align-items:start}
+  .story .via{align-self:center;text-align:center;font-size:12px;color:var(--soft)}
+  .story .via b{display:block;font-size:18px;font-weight:400}
+  @media (max-width:820px){.story{grid-template-columns:1fr}.story:not(.stack) .via{display:none}}
+  .story.stack .via{margin:0 0 12px}
+  .tabs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:8px 10px;background:var(--well);border-bottom:1px solid var(--line)}
+  .fname{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--ink);font-weight:600;margin-right:6px}
+  .tab{font-size:12px;color:var(--muted);padding:2px 10px;border-radius:99px;background:var(--paper);border:1px solid var(--line)}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  ul.serves{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+  ul.serves li{border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;font-size:14px}
+  ul.serves li b{display:block;margin-bottom:2px}
+  ul.serves li span{color:var(--muted);font-size:13px}
+  ul.serves code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--well);padding:1px 6px;border-radius:6px}
+  .storylabel{margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--soft)}
+  .storylabel.follow{margin-top:30px}
+  .story.stack{display:block}
+  .story.stack .pane{margin-bottom:14px}
+  ul.serves.row3{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:820px){ul.serves.row3{grid-template-columns:1fr}}
+  .scroll{overflow-x:auto}
+  table.sched{font-size:11.5px;min-width:640px}
+  table.sched th,table.sched td{padding:6px 8px;white-space:nowrap}
+  table.sched th:last-child,table.sched td:last-child{white-space:normal;min-width:240px}
+  .asis{font-size:13px;color:var(--muted);margin:10px 0 14px}
+  .pane{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--paper)}
+  .pane table{width:100%;border-collapse:collapse;font-size:13px}
+  .pane th,.pane td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+  .pane tr:last-child td{border-bottom:0}
+  .pane th{color:var(--muted);font-weight:600;background:var(--well)}
+  .play{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--paper)}
+  .play .req{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+    background:var(--well);padding:10px 14px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+  .play .req .m{color:var(--muted)}
+  .play .controls{display:flex;flex-wrap:wrap;gap:8px 20px;padding:8px 14px;
+    border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--paper)}
+  .play .controls label{display:inline-flex;align-items:center;gap:6px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .play select,.play input{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:1px 4px;color:var(--ink)}
+  .play input{width:11ch}
+  pre.resp{margin:0;padding:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:12.5px;line-height:1.6;overflow-x:auto;max-height:460px}
+  .resp .k{color:var(--soft)}
+  .resp .d{color:var(--soft)}
+  footer.site{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;color:var(--muted)}
+  footer.site .wrap{display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+  footer.site a{color:var(--muted)}
+  footer.site a:hover{color:var(--ink)}
+  :where(a,button):focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:6px}
+</style>
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="#top">nori</a>
+    <nav class="top" aria-label="Main">
+      <a href="#why">Why</a>
+      <a href="#how">How it works</a>
+      <a href="#use-cases">Use cases</a>
+      <a href="#quickstart">Quick start</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <h1>Import a spreadsheet, get an API.</h1>
+        <p class="sub">nori is a single-binary backend. Run it, sign in as admin, drop in an
+        .xlsx, and every sheet becomes a private table with a CRUD API, accounts,
+        and an admin dashboard.</p>
+        <div class="ctas">
+          <a class="btn primary" href="#quickstart">Get started</a>
+          <p class="friction">One binary &middot; self-hosting stays free forever</p>
+        </div>
+        <div class="swatchline">
+          <span>White-label in one click:</span>
+          <span class="swatches" role="group" aria-label="Try a brand color">
+            <button class="swatch" type="button" data-color="#18181b" style="background:#18181b" aria-pressed="true" title="Default"></button>
+            <button class="swatch" type="button" data-color="#3db83d" style="background:#3db83d" aria-pressed="false" title="Green"></button>
+            <button class="swatch" type="button" data-color="#2563eb" style="background:#2563eb" aria-pressed="false" title="Blue"></button>
+            <button class="swatch" type="button" data-color="#facc15" style="background:#facc15" aria-pressed="false" title="Amber"></button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="why">
+    <div class="wrap">
+      <h2>The missing middle</h2>
+      <p class="lede">Building a web app on Google Sheets breaks down the moment it gets real:
+      no accounts, shared links, quotas. The standard advice is jump to a Backend-as-a-Service -
+      but that is a pile of decisions (provider, plan, schema, SDK, auth flows) before a single
+      row of your data ships. nori is the step in between: auth, data, and the backend basics.</p>
+      <div class="spectrum">
+        <div class="track" aria-hidden="true"></div>
+        <div class="stop">
+          <span class="dot"></span>
+          <span class="verb">Google Sheets</span>
+          <h3>Not made for apps</h3>
+          <p>Shared links instead of accounts, OAuth plumbing when it gets serious, quotas - and one stray edit away from a broken backend.</p>
+        </div>
+        <div class="stop hl">
+          <span class="dot"></span>
+          <span class="verb">nori</span>
+          <h3>Auth, data, and the basics</h3>
+          <p>Your spreadsheet as a private backend: accounts and roles, a resource-shaped API, audit trail and backups - nothing else to decide. Self-hosted in one command.</p>
+        </div>
+        <div class="stop">
+          <span class="dot"></span>
+          <span class="verb">Database / BaaS</span>
+          <h3>Every choice, day one</h3>
+          <p>Provider, plan, schema, SDK, auth flows - powerful, but most of it goes unused while all you need is one table behind login.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <h2>Three steps, one binary</h2>
+      <p class="lede">One process over one file, durable on every write - that is the whole deployment.</p>
+      <ol class="steps">
+        <li><b>Run it</b>
+          <p>Start the binary with a data directory and an admin password.</p></li>
+        <li><b>Import an .xlsx</b>
+          <p>Every sheet becomes a table. Column types are detected and every value is validated from then on.</p></li>
+        <li><b>Build on the API</b>
+          <p>Humans get sessions, machines get revocable API keys, and the docs are written for
+          your coding agents - Claude Code, Cursor, Codex.</p></li>
+      </ol>
+      <div class="play">
+        <div class="req"><span class="m">GET</span>&nbsp;/api/tables/Orders/rows<span id="p-qs"></span></div>
+        <div class="controls">
+          <label>limit
+            <select id="p-limit" aria-label="limit">
+              <option>1</option><option selected>2</option><option>3</option><option>5</option><option>10</option>
+            </select>
+          </label>
+          <label>status
+            <select id="p-status" aria-label="status filter">
+              <option value="">(any)</option><option>shipped</option><option>delivered</option><option>refunded</option><option>paid</option>
+            </select>
+          </label>
+          <label>q
+            <input id="p-q" aria-label="search q" autocomplete="off" spellcheck="false" placeholder="contains...">
+          </label>
+        </div>
+        <pre class="resp" id="p-out"></pre>
+        <p class="asis" style="margin:10px 14px">The sample Orders table ships inside this page -
+        flip the query and read exactly what nori returns for it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="use-cases">
+    <div class="wrap">
+      <h2>Where nori fits</h2>
+      <p class="lede">Small teams run on workbooks - a few sheets, one per subject. Imported,
+      the workbook runs the place:</p>
+      <p class="storylabel">A bakery</p>
+      <div class="story">
+        <div class="pane">
+          <div class="tabs">
+            <span class="fname">orders.xlsx</span>
+            <span class="tab">Customers</span>
+            <span class="tab">Products</span>
+            <span class="tab on">Orders</span>
+          </div>
+          <table>
+            <tr><th>order id</th><th>customer</th><th>product</th><th>total</th><th>status</th></tr>
+            <tr><td>ORD-1001</td><td>Som Smith</td><td>Dark Croissant 080</td><td>1250.75</td><td>shipped</td></tr>
+            <tr><td>ORD-1002</td><td>Win Tanaka</td><td>Fresh Coffee 091</td><td>450</td><td>refunded</td></tr>
+          </table>
+        </div>
+        <div class="via"><b>&rarr;</b>import</div>
+        <ul class="serves">
+          <li><b>Counter staff</b><span>Update the status column in the dashboard - one account each, every write audited.</span></li>
+          <li><b>Shop website</b><span>Reads the day's queue: <code>GET /api/tables/Orders/rows</code></span></li>
+          <li><b>Delivery app</b><span>Marks orders delivered through the API with its own revocable key.</span></li>
+        </ul>
+      </div>
+      <p class="storylabel follow">A small hospital ward</p>
+      <div class="story stack">
+        <div class="pane">
+          <div class="tabs">
+            <span class="fname">ward.xlsx</span>
+            <span class="tab on">Doctors</span>
+          </div>
+          <div class="scroll">
+            <table class="sched">
+              <tr><th>name</th><th>dept</th><th>type</th><th>mon</th><th>tue</th><th>wed</th><th>thu</th><th>fri</th><th>sat</th><th>sun</th><th>note</th></tr>
+              <tr><td>อนันต์</td><td>Med</td><td>Full time</td><td>09:00-12:00</td><td>13:00-16:00</td><td>09:00-16:00</td><td>09:00-16:00</td><td></td><td>09:00-12:00</td><td></td><td>ไม่รับ New case</td></tr>
+              <tr><td>พลอย</td><td>GP</td><td>Full time</td><td>09:00-16:00</td><td>09:00-16:00</td><td></td><td></td><td>09:00-12:00</td><td></td><td>09:00-16:00</td><td>ไม่รับ New case // ถ้า consult ให้ Line ถามก่อน</td></tr>
+            </table>
+          </div>
+        </div>
+        <p class="asis">nori takes it as-is: Thai and English in one sheet, time ranges as plain
+        text, blank cells stay blank - the sheet is the schema.</p>
+        <div class="via"><b>&darr;</b>import</div>
+        <ul class="serves row3">
+          <li><b>Head nurse</b><span>Owns the workbook - edits OPD hours in the dashboard when the rotation changes.</span></li>
+          <li><b>Schedule app</b><span>Reads the roster: <code>GET /api/tables/Doctors/rows</code></span></li>
+          <li><b>Doctors</b><span>Check their OPD hours from their phones with viewer accounts.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="quickstart">
+    <div class="wrap">
+      <h2>Quick start</h2>
+      <p class="lede">One file to run - database and dashboard included.</p>
+<pre class="code"><span class="c"># download the binary for your platform from GitHub Releases, then:</span>
+ADMIN_PASS=secret ./nori -addr :8080 -data ./data
+
+<span class="c"># open http://localhost:8080, sign in as admin,
+# then import an .xlsx - every sheet becomes a table</span></pre>
+      <p class="friction">Prefer building yourself? <b>go build</b> works too, and a Dockerfile is included.</p>
+      <ul class="facts">
+        <li><b>~0.3ms</b> cached reads</li>
+        <li><b>~200-250</b> writes/s sustained</li>
+        <li><b>fsync</b> on every write</li>
+        <li><b>200,000</b> rows per table, stated up front</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Open source under <a href="https://opensource.org/license/mit" rel="license">MIT</a>.</span>
+    <span><a href="#top">Back to top</a></span>
+  </div>
+</footer>
+
+<script>
+function hexToHsl(hex){
+  var v=parseInt(hex.slice(1),16),r=((v>>16)&255)/255,g=((v>>8)&255)/255,b=(v&255)/255;
+  var mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2,h=0,s=0;
+  if(mx!==mn){var d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4;h*=60}
+  return{h:h,s:s*100,l:l*100};
+}
+function textOn(hex){return hexToHsl(hex).l>50?"#18181b":"#ffffff"}
+function hash(str){
+  var x=2166136261;
+  for(var i=0;i<str.length;i++){x^=str.charCodeAt(i);x=Math.imul(x,16777619);}
+  return x>>>0;
+}
+function mulberry32(a){
+  return function(){a|=0;a=(a+0x6d2b79f5)|0;var t=Math.imul(a^(a>>>15),1|a);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
+}
+function pick(rng,arr){return arr[Math.floor(rng()*arr.length)];}
+var STYLES=[
+  function flow(ctx,W,H,rng,palette,k){
+    var a1=rng()*Math.PI*2,a2=rng()*Math.PI*2,freq=2+rng()*3;
+    ctx.lineCap="round";
+    for(var i=0,n=Math.floor((60+rng()*80)*k);i<n;i++){
+      var x=rng()*W,y=rng()*H;
+      ctx.strokeStyle=pick(rng,palette);
+      ctx.globalAlpha=0.55+rng()*0.45;
+      ctx.lineWidth=(0.5+rng()*1.8)*Math.min(k,3);
+      ctx.beginPath();ctx.moveTo(x,y);
+      for(var s=0,m=20+rng()*40;s<m;s++){
+        var a=a1+Math.sin((x/W)*freq*Math.PI+a2)*Math.PI+Math.cos((y/H)*freq*Math.PI)*0.9;
+        x+=Math.cos(a)*3;y+=Math.sin(a)*3;ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+  },
+  function waves(ctx,W,H,rng,palette,k){
+    ctx.lineCap="round";
+    var amp=H*(0.04+rng()*0.08),base=H*(0.1+rng()*0.2),step=H/(8+rng()*8)/Math.max(1,k*0.5);
+    for(var y=base;y<H+amp;y+=step){
+      ctx.strokeStyle=pick(rng,palette);
+      ctx.globalAlpha=0.5+rng()*0.5;
+      ctx.lineWidth=(1+rng()*3)*Math.min(k,3);
+      var f=2+rng()*4,ph=rng()*Math.PI*2;
+      ctx.beginPath();
+      for(var x=-4;x<=W+4;x+=3){
+        var yy=y+Math.sin((x/W)*f*Math.PI+ph)*amp;
+        x===-4?ctx.moveTo(x,yy):ctx.lineTo(x,yy);
+      }
+      ctx.stroke();
+    }
+  },
+  function rings(ctx,W,H,rng,palette,k){
+    var cx=W*(0.3+rng()*0.4),cy=H*(0.3+rng()*0.4),max=Math.hypot(W,H);
+    for(var r=max*(0.05+rng()*0.1);r<max;r+=max/(8+rng()*8)/Math.max(1,k*0.5)){
+      ctx.strokeStyle=pick(rng,palette);
+      ctx.globalAlpha=0.4+rng()*0.6;
+      ctx.lineWidth=(1+rng()*4)*Math.min(k,3);
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+    }
+  },
+  function mosaic(ctx,W,H,rng,palette){
+    var n=6+Math.floor(rng()*4),cw=W/n,ch=H/Math.max(1,Math.round((n*H)/W));
+    for(var gx=0;gx<W;gx+=cw){
+      for(var gy=0;gy<H;gy+=ch){
+        if(rng()<0.3)continue;
+        ctx.globalAlpha=0.35+rng()*0.65;
+        ctx.fillStyle=pick(rng,palette);
+        var s=Math.min(cw,ch)*(0.5+rng()*0.5);
+        if(rng()<0.5){ctx.fillRect(gx+(cw-s)/2,gy+(ch-s)/2,s,s);}
+        else{ctx.beginPath();ctx.arc(gx+cw/2,gy+ch/2,s/2,0,Math.PI*2);ctx.fill();}
+      }
+    }
+  }
+];
+function drawArt(ctx,W,H,seed,variant,hue){
+  var rng=mulberry32(hash(seed));
+  var style=variant==null?Math.floor(rng()*STYLES.length):variant;
+  var k=Math.max(1,240/Math.max(W,H));
+  ctx.globalAlpha=1;ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);
+  var h0=hue==null?rng()*360:hue;
+  var palette=[
+    "hsl("+h0+" 65% "+(48+rng()*18)+"%)",
+    "hsl("+((h0+25+rng()*45)%360)+" 60% "+(55+rng()*15)+"%)",
+    "hsl("+((h0+175+rng()*20)%360)+" 55% "+(45+rng()*18)+"%)"
+  ];
+  STYLES[style](ctx,W,H,rng,palette,k);
+  ctx.globalAlpha=1;
+}
+function hueFromHex(hex){
+  var m=/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((hex||"").trim());
+  if(!m)return null;
+  var s=m[1];
+  if(s.length===3)s=s.split("").map(function(c){return c+c}).join("");
+  var n=parseInt(s,16);
+  var r=((n>>16)&255)/255,g=((n>>8)&255)/255,b=(n&255)/255;
+  var max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  if(d===0)return null;
+  var h=max===r?((g-b)/d)%6:max===g?(b-r)/d+2:(r-g)/d+4;
+  return((h*60)+360)%360;
+}
+var bg=document.getElementById("bg");
+var brandColor="#18181b";
+function paintFavicon(){
+  var c=document.createElement("canvas");c.width=64;c.height=64;
+  drawArt(c.getContext("2d"),64,64,"nori",3,hueFromHex(brandColor));
+  var link=document.querySelector("link[rel='icon']");
+  if(!link){link=document.createElement("link");link.rel="icon";document.head.appendChild(link);}
+  link.href=c.toDataURL("image/png");link.type="image/png";
+}
+function paintBg(){
+  bg.width=window.innerWidth;bg.height=window.innerHeight;
+  var ctx=bg.getContext("2d");
+  drawArt(ctx,bg.width,bg.height,"nori",hash("nori")%3,hueFromHex(brandColor));
+  ctx.fillStyle="rgba(255,255,255,0.92)";
+  ctx.fillRect(0,0,bg.width,bg.height);
+}
+var resizeTimer;
+window.addEventListener("resize",function(){
+  clearTimeout(resizeTimer);resizeTimer=setTimeout(paintBg,150);
+});
+function applyBrand(hex){
+  var root=document.documentElement;
+  root.style.setProperty("--brand",hex);
+  root.style.setProperty("--brand-on",textOn(hex));
+  brandColor=hex;
+  paintBg();
+  paintFavicon();
+  document.querySelectorAll(".swatch").forEach(function(b){
+    b.setAttribute("aria-pressed",String(b.dataset.color===hex));
+  });
+}
+paintBg();
+applyBrand("#18181b");
+document.querySelectorAll(".swatch").forEach(function(b){
+  b.addEventListener("click",function(){applyBrand(b.dataset.color)});
+});
+/* --- interactive API panel: mirrors GET /api/tables/Orders/rows --- */
+var ORDERS=[
+{"customer":"Som Smith","date":"2026-09-21","id":"57424071-7679-4e2e-9360-2f8933d0dfb0","order id":"ORD-1001","product":"Dark Croissant 080","qty":"3","status":"shipped","total":"294"},
+{"customer":"Win Tanaka","date":"2026-06-11","id":"393d13fe-5cb3-441a-9fb6-56afbbd11abe","order id":"ORD-1002","product":"Fresh Coffee 091","qty":"1","status":"refunded","total":"450"},
+{"customer":"Carla Lee","date":"2026-08-14","id":"b2724a93-d952-4175-8075-e46011364bc9","order id":"ORD-1003","product":"Maple Syrup 137","qty":"3","status":"delivered","total":"1062"},
+{"customer":"Hana Smith","date":"2026-02-15","id":"98191f64-007f-46b1-a0eb-7bbb4bddab87","order id":"ORD-1004","product":"Spiced Coffee 045","qty":"2","status":"delivered","total":"60"},
+{"customer":"Nok Kim","date":"2026-01-01","id":"5c929b21-eaa4-463f-a4b7-8ae1e13d29da","order id":"ORD-1005","product":"Spiced Cocoa 022","qty":"2","status":"refunded","total":"704"},
+{"customer":"Som Nguyen","date":"2026-06-25","id":"27915367-86f4-4c16-b7ca-2ca61fb5b7d3","order id":"ORD-1006","product":"Honey Syrup 078","qty":"2","status":"shipped","total":"110"},
+{"customer":"Ploy Lee","date":"2026-06-25","id":"17a6cf7b-63cb-4919-a8e5-cf72e4bceec2","order id":"ORD-1007","product":"Golden Croissant 043","qty":"1","status":"shipped","total":"432"},
+{"customer":"Gift Garcia","date":"2026-07-27","id":"e4f5124c-a785-4e39-948e-aebdbeb11c22","order id":"ORD-1008","product":"Golden Croissant 092","qty":"1","status":"refunded","total":"446"},
+{"customer":"Lek Rossi","date":"2026-05-28","id":"9716da44-5076-489c-aa04-b4e7550d6326","order id":"ORD-1009","product":"Butter Coffee 052","qty":"2","status":"shipped","total":"608"},
+{"customer":"Hana Rossi","date":"2026-01-02","id":"64c5ef26-57e7-4f76-97ab-d173f460ee73","order id":"ORD-1010","product":"Matcha Coffee 113","qty":"1","status":"shipped","total":"314"},
+{"customer":"Kan Brown","date":"2026-06-28","id":"8485b589-8688-4a38-89d2-4f8800a1ea64","order id":"ORD-1011","product":"Spiced Tea 057","qty":"3","status":"delivered","total":"141"},
+{"customer":"Win Tanaka","date":"2026-03-18","id":"3782a97a-5db4-4940-b12d-b5d6efca907e","order id":"ORD-1012","product":"Fresh Cookie 034","qty":"1","status":"shipped","total":"458"},
+{"customer":"Oat Kim","date":"2026-09-21","id":"29da40fb-f9ec-4e5e-a73c-b9c4c158dec3","order id":"ORD-1013","product":"Fresh Cookie 053","qty":"1","status":"shipped","total":"241"},
+{"customer":"Kan Brown","date":"2026-06-11","id":"3d67694f-aa81-4d92-b1ba-4b2c06a7fe74","order id":"ORD-1014","product":"Iced Croissant 067","qty":"3","status":"delivered","total":"369"},
+{"customer":"Oat Tanaka","date":"2026-05-09","id":"a605ae36-58d4-4860-b158-04d9970fd055","order id":"ORD-1015","product":"Matcha Muffin 063","qty":"5","status":"paid","total":"100"},
+{"customer":"Fon Tanaka","date":"2026-05-03","id":"6632caac-8b09-4c35-bb8b-9540146f323a","order id":"ORD-1016","product":"Iced Coffee 105","qty":"1","status":"refunded","total":"461"},
+{"customer":"Ivy Brown","date":"2026-07-18","id":"1ecb9f99-c94a-42cd-adb8-97cbc29ccc4b","order id":"ORD-1017","product":"Honey Muffin 066","qty":"5","status":"delivered","total":"275"},
+{"customer":"Hana Nguyen","date":"2026-07-21","id":"d9d55a43-d071-4cd9-8d88-2b8b256f4b55","order id":"ORD-1018","product":"Golden Bagel 058","qty":"4","status":"delivered","total":"1352"},
+{"customer":"Nok Chen","date":"2026-09-08","id":"f7af5ee4-05de-4733-b810-8df5e4712cc7","order id":"ORD-1019","product":"Dark Coffee 040","qty":"5","status":"delivered","total":"2450"},
+{"customer":"Carla Nguyen","date":"2026-01-01","id":"956bdecf-7193-4fb1-842b-ac0a61a8033b","order id":"ORD-1020","product":"Fresh Coffee 012","qty":"4","status":"shipped","total":"992"},
+{"customer":"Gift Brown","date":"2026-05-08","id":"32830483-4b9e-4930-9ef0-a71ce081574b","order id":"ORD-1021","product":"Honey Coffee 084","qty":"3","status":"paid","total":"1047"},
+{"customer":"Hana Brown","date":"2026-08-07","id":"8e3fe1ff-9f0e-41f8-866a-b9aeada54b32","order id":"ORD-1022","product":"Butter Bagel 046","qty":"3","status":"paid","total":"738"},
+{"customer":"Ploy Tanaka","date":"2026-04-26","id":"f90d3b44-a58d-4fe7-8f3d-36651bbd72b2","order id":"ORD-1023","product":"Fresh Coffee 120","qty":"3","status":"paid","total":"1311"},
+{"customer":"Win Nguyen","date":"2026-08-21","id":"c9197bd1-ef05-43a6-841b-ee478013ac3a","order id":"ORD-1024","product":"Golden Coffee 047","qty":"2","status":"paid","total":"410"},
+{"customer":"Hana Brown","date":"2026-01-23","id":"b78a21ec-fb6f-4bac-b43f-fa2c8d2ddf56","order id":"ORD-1025","product":"Spiced Tea 057","qty":"5","status":"delivered","total":"1635"},
+{"customer":"Carla Tanaka","date":"2026-01-27","id":"8938847b-38a7-4a5c-8495-cdd23ea2b545","order id":"ORD-1026","product":"Vanilla Cocoa 082","qty":"1","status":"paid","total":"131"},
+{"customer":"Nok Rossi","date":"2026-06-01","id":"7f9d550b-adfd-42a6-8380-dae00d9948ac","order id":"ORD-1027","product":"Vanilla Syrup 132","qty":"3","status":"shipped","total":"483"},
+{"customer":"Hana Smith","date":"2026-03-24","id":"941ed9d1-4361-4b08-9578-07435c1c030e","order id":"ORD-1028","product":"Fresh Syrup 037","qty":"1","status":"shipped","total":"169"},
+{"customer":"Lek Chen","date":"2026-07-20","id":"81a48b74-e032-44a3-b3b4-01fdbb9cc4d3","order id":"ORD-1029","product":"Golden Cookie 055","qty":"5","status":"refunded","total":"1305"},
+{"customer":"Som Smith","date":"2026-08-09","id":"49a3b4a7-16c4-4f64-87f4-07a39a7aff54","order id":"ORD-1030","product":"Fresh Cookie 034","qty":"2","status":"paid","total":"736"},
+{"customer":"Gift Garcia","date":"2026-03-25","id":"2f2047eb-44fc-4d87-a6a0-a25bfa727b6e","order id":"ORD-1031","product":"Matcha Muffin 063","qty":"3","status":"shipped","total":"555"},
+{"customer":"Carla Lee","date":"2026-07-22","id":"047457f6-05e4-4f59-8818-437fe03d7f5b","order id":"ORD-1032","product":"Spiced Coffee 106","qty":"3","status":"shipped","total":"261"},
+{"customer":"Oat Brown","date":"2026-03-01","id":"e6b7ff77-a497-450f-95bf-ec5889467cb5","order id":"ORD-1033","product":"Fresh Cookie 053","qty":"1","status":"shipped","total":"309"},
+{"customer":"Lek Lee","date":"2026-07-11","id":"1a1b6578-c299-4f9b-9c60-455c692cdf5e","order id":"ORD-1034","product":"Butter Tea 107","qty":"5","status":"delivered","total":"1525"},
+{"customer":"Dan Chen","date":"2026-08-25","id":"f98733a2-7415-41a2-9880-abbd5328d279","order id":"ORD-1035","product":"Matcha Coffee 113","qty":"2","status":"paid","total":"374"},
+{"customer":"Amy Garcia","date":"2026-04-12","id":"2b405102-b6c2-40d8-9ffc-1fb2bfc579b5","order id":"ORD-1036","product":"Butter Cookie 059","qty":"4","status":"paid","total":"772"},
+{"customer":"Ploy Brown","date":"2026-02-03","id":"bbc1bff6-5573-420c-b152-9f7386b39ad2","order id":"ORD-1037","product":"Spiced Bagel 134","qty":"2","status":"shipped","total":"402"},
+{"customer":"Hana Rossi","date":"2026-09-11","id":"d16758bb-3e4e-4257-b5f8-7fa335f54d5a","order id":"ORD-1038","product":"Maple Syrup 009","qty":"5","status":"refunded","total":"2140"},
+{"customer":"Ploy Kim","date":"2026-07-12","id":"b80af287-0269-4feb-b720-aaafaea54c44","order id":"ORD-1039","product":"Butter Tea 107","qty":"5","status":"paid","total":"510"},
+{"customer":"Lek Lee","date":"2026-06-02","id":"c0c6aed2-3bd7-4e15-89c2-2847d43521dc","order id":"ORD-1040","product":"Matcha Cocoa 021","qty":"2","status":"delivered","total":"518"},
+{"customer":"Oat Tanaka","date":"2026-06-07","id":"db79c76a-4e97-45e6-81e9-574374922c7f","order id":"ORD-1041","product":"Butter Croissant 094","qty":"3","status":"paid","total":"747"},
+{"customer":"Joe Rossi","date":"2026-07-02","id":"de54a8a1-cb5b-41e6-8d36-100dccc39b54","order id":"ORD-1042","product":"Butter Cookie 059","qty":"3","status":"delivered","total":"1386"},
+{"customer":"Gift Smith","date":"2026-01-02","id":"aeff438d-1153-43e8-95f3-a0d9578041f0","order id":"ORD-1043","product":"Butter Bagel 046","qty":"4","status":"delivered","total":"1172"},
+{"customer":"Quinn Tanaka","date":"2026-03-19","id":"1c985b16-c286-4c22-a4f9-4c691d9eba60","order id":"ORD-1044","product":"Butter Bagel 112","qty":"2","status":"delivered","total":"114"},
+{"customer":"Kan Brown","date":"2026-09-19","id":"dccd4745-9352-4ef1-8486-4813995702a5","order id":"ORD-1045","product":"Golden Cookie 055","qty":"3","status":"refunded","total":"378"},
+{"customer":"Mild Nguyen","date":"2026-08-09","id":"45b42a0f-091c-40fc-9975-be311de4f73e","order id":"ORD-1046","product":"Fresh Coffee 075","qty":"5","status":"shipped","total":"635"},
+{"customer":"Oat Tanaka","date":"2026-03-10","id":"e3665df7-ce13-462e-b842-b12c7eb3aacb","order id":"ORD-1047","product":"Butter Bagel 056","qty":"2","status":"paid","total":"380"},
+{"customer":"Ivy Brown","date":"2026-07-23","id":"b67ccf67-07b9-47f7-9d6f-b4ae144bc866","order id":"ORD-1048","product":"Butter Bagel 089","qty":"1","status":"refunded","total":"386"},
+{"customer":"Fon Tanaka","date":"2026-04-27","id":"0c886b42-3912-41a2-95ce-fb0d5fb85849","order id":"ORD-1049","product":"Matcha Tea 099","qty":"1","status":"shipped","total":"86"},
+{"customer":"Nok Rossi","date":"2026-04-05","id":"759f4ebe-e163-4119-b2ed-14f56232a969","order id":"ORD-1050","product":"Spiced Muffin 003","qty":"4","status":"refunded","total":"564"},
+{"customer":"Kan Brown","date":"2026-07-09","id":"bc16c578-813b-4039-91a3-4b86aab9e0f1","order id":"ORD-1051","product":"Iced Croissant 076","qty":"4","status":"shipped","total":"1848"},
+{"customer":"Nok Kim","date":"2026-04-01","id":"4586f1a9-5041-4ac4-8d7e-3b2db1b72b9e","order id":"ORD-1052","product":"Butter Bagel 089","qty":"3","status":"paid","total":"507"},
+{"customer":"Oat Brown","date":"2026-09-26","id":"e6888ff3-2306-48b1-b37f-cbffa9988387","order id":"ORD-1053","product":"Butter Coffee 008","qty":"2","status":"refunded","total":"924"},
+{"customer":"Hana Rossi","date":"2026-01-28","id":"f27f56e9-eb8e-425a-aed6-be4f2bfae6b5","order id":"ORD-1054","product":"Spiced Tea 057","qty":"1","status":"delivered","total":"151"},
+{"customer":"Win Nguyen","date":"2026-01-22","id":"daaeb4fa-2580-44bb-b62c-5b784d7e0d2f","order id":"ORD-1055","product":"Butter Tea 085","qty":"1","status":"paid","total":"38"},
+{"customer":"Oat Kim","date":"2026-06-23","id":"83c547f1-574c-404f-965e-0627be2267e1","order id":"ORD-1056","product":"Dark Muffin 100","qty":"2","status":"delivered","total":"530"},
+{"customer":"Carla Kim","date":"2026-09-26","id":"9f45f7ec-1d95-46ac-8289-78891d214637","order id":"ORD-1057","product":"Fresh Muffin 114","qty":"1","status":"paid","total":"197"},
+{"customer":"Gift Patel","date":"2026-07-09","id":"3d7b5c6e-73b3-48cd-9fad-b489f93b886c","order id":"ORD-1058","product":"Butter Croissant 119","qty":"2","status":"delivered","total":"308"},
+{"customer":"Amy Brown","date":"2026-01-15","id":"8b19543e-3266-4ce1-aaa2-738b81a3b34a","order id":"ORD-1059","product":"Honey Muffin 010","qty":"3","status":"refunded","total":"582"},
+{"customer":"Mild Nguyen","date":"2026-08-05","id":"2be8b524-edfa-41ef-abe8-fa68d17ce07b","order id":"ORD-1060","product":"Matcha Coffee 133","qty":"3","status":"shipped","total":"1263"},
+{"customer":"Lek Rossi","date":"2026-06-28","id":"4aa3f549-4e64-456c-a168-f6d318dff646","order id":"ORD-1061","product":"Golden Muffin 072","qty":"2","status":"delivered","total":"628"},
+{"customer":"Oat Tanaka","date":"2026-09-09","id":"69337c8f-bd35-424b-a5df-3ece6eb9de6c","order id":"ORD-1062","product":"Vanilla Bagel 098","qty":"5","status":"refunded","total":"460"},
+{"customer":"Quinn Tanaka","date":"2026-06-18","id":"67c8e652-4aa1-4c43-aa09-3029464fbd8e","order id":"ORD-1063","product":"Honey Muffin 010","qty":"2","status":"refunded","total":"288"},
+{"customer":"Gift Smith","date":"2026-03-09","id":"a1cba24b-230f-4be1-b095-d3a4809d3b17","order id":"ORD-1064","product":"Golden Syrup 013","qty":"5","status":"shipped","total":"1000"},
+{"customer":"Gift Kim","date":"2026-04-25","id":"37b2cc98-f1cb-41ff-9d98-56a4b800cadb","order id":"ORD-1065","product":"Matcha Coffee 133","qty":"5","status":"shipped","total":"2045"},
+{"customer":"Lek Rossi","date":"2026-01-13","id":"962cd2a0-f2a1-4619-9e42-5abc37e13d3e","order id":"ORD-1066","product":"Matcha Coffee 113","qty":"4","status":"paid","total":"672"},
+{"customer":"Ivy Kim","date":"2026-08-19","id":"ef45fc61-1bc2-48cd-b29e-776ade328347","order id":"ORD-1067","product":"Spiced Coffee 106","qty":"4","status":"paid","total":"1580"},
+{"customer":"Quinn Rossi","date":"2026-05-04","id":"ce289f5c-8859-4f4c-bc78-eabf05dd797c","order id":"ORD-1068","product":"Golden Bagel 058","qty":"1","status":"refunded","total":"429"},
+{"customer":"Ploy Lee","date":"2026-02-24","id":"fa455021-4ad7-48d0-a283-3d9118657831","order id":"ORD-1069","product":"Matcha Tea 099","qty":"4","status":"delivered","total":"516"},
+{"customer":"Bob Tanaka","date":"2026-03-10","id":"92582b07-880f-404a-89f0-77d745346238","order id":"ORD-1070","product":"Golden Cocoa 115","qty":"5","status":"shipped","total":"1245"},
+{"customer":"Tae Tanaka","date":"2026-05-23","id":"95936555-e9c6-4d36-85ed-76fe6f03fc03","order id":"ORD-1071","product":"Matcha Coffee 133","qty":"1","status":"delivered","total":"192"},
+{"customer":"Zack Rossi","date":"2026-06-28","id":"4c68b30d-c26b-4790-9537-970d49c1b4f6","order id":"ORD-1072","product":"Vanilla Cookie 093","qty":"2","status":"refunded","total":"78"},
+{"customer":"Oat Tanaka","date":"2026-07-28","id":"f8e5a332-7ac2-4fe7-a881-ffec8791d8ed","order id":"ORD-1073","product":"Honey Muffin 010","qty":"4","status":"refunded","total":"1188"},
+{"customer":"Win Patel","date":"2026-07-17","id":"79e11c42-2c72-437f-9f1c-4c713011bde6","order id":"ORD-1074","product":"Honey Syrup 078","qty":"4","status":"delivered","total":"356"},
+{"customer":"Win Kim","date":"2026-04-19","id":"ee6b6604-1ee0-48d2-badb-e157953a88be","order id":"ORD-1075","product":"Vanilla Cookie 093","qty":"2","status":"paid","total":"660"},
+{"customer":"Yui Patel","date":"2026-01-10","id":"ace46fa6-2de7-4cdb-8e43-a335c1dface7","order id":"ORD-1076","product":"Golden Syrup 044","qty":"3","status":"refunded","total":"459"},
+{"customer":"Rin Tanaka","date":"2026-06-14","id":"771b6c1f-8c18-432f-bf3f-7f42e79dcb26","order id":"ORD-1077","product":"Honey Muffin 066","qty":"1","status":"refunded","total":"153"},
+{"customer":"Win Smith","date":"2026-05-04","id":"4e2d018d-ae34-430e-800f-b52224edfbe7","order id":"ORD-1078","product":"Maple Tea 032","qty":"3","status":"delivered","total":"1206"},
+{"customer":"Yui Nguyen","date":"2026-04-13","id":"14674be0-81bd-40ab-8711-835d2827357b","order id":"ORD-1079","product":"Iced Croissant 067","qty":"1","status":"refunded","total":"141"},
+{"customer":"Nok Kim","date":"2026-03-18","id":"304fcaae-18c0-41ef-b396-455ca520905a","order id":"ORD-1080","product":"Golden Muffin 033","qty":"4","status":"paid","total":"528"},
+{"customer":"Amy Garcia","date":"2026-08-22","id":"54ee698e-d223-4e38-b1b2-ee48eb649af2","order id":"ORD-1081","product":"Fresh Coffee 075","qty":"5","status":"refunded","total":"575"},
+{"customer":"Bob Tanaka","date":"2026-02-26","id":"d90a3c48-4a3f-40a5-a64e-cf175d834d85","order id":"ORD-1082","product":"Honey Muffin 010","qty":"5","status":"paid","total":"1280"},
+{"customer":"Oat Kim","date":"2026-02-25","id":"65698d2c-a446-4185-b98a-484de602bdba","order id":"ORD-1083","product":"Butter Cocoa 011","qty":"4","status":"paid","total":"1260"},
+{"customer":"Fon Tanaka","date":"2026-02-18","id":"eecd900b-75e1-4fa8-a144-448851220dc7","order id":"ORD-1084","product":"Matcha Muffin 074","qty":"4","status":"shipped","total":"820"},
+{"customer":"Kan Garcia","date":"2026-09-17","id":"7ed3f35b-733c-4632-a4df-95c67af8d1f9","order id":"ORD-1085","product":"Maple Croissant 020","qty":"3","status":"delivered","total":"420"},
+{"customer":"Lek Chen","date":"2026-06-18","id":"517da32c-1649-4681-88d1-eb032c4be194","order id":"ORD-1086","product":"Maple Coffee 068","qty":"1","status":"shipped","total":"211"},
+{"customer":"Bob Patel","date":"2026-01-12","id":"fdf52c90-b8c4-4150-a1a7-54004e249494","order id":"ORD-1087","product":"Maple Cocoa 131","qty":"3","status":"paid","total":"888"},
+{"customer":"Carla Lee","date":"2026-01-12","id":"f50336f1-34ee-49f7-80ba-e6da00f965d6","order id":"ORD-1088","product":"Fresh Coffee 012","qty":"3","status":"refunded","total":"1389"},
+{"customer":"Kan Garcia","date":"2026-08-09","id":"06191b82-dde5-46c8-ae46-2a6895440cbe","order id":"ORD-1089","product":"Golden Coffee 047","qty":"2","status":"paid","total":"432"},
+{"customer":"Ivy Tanaka","date":"2026-02-20","id":"3ab65143-5735-47b8-b579-de3ff7664f62","order id":"ORD-1090","product":"Butter Croissant 119","qty":"1","status":"delivered","total":"495"},
+{"customer":"Kan Brown","date":"2026-02-24","id":"19057863-4bbd-44ac-8f49-bd8021389e54","order id":"ORD-1091","product":"Fresh Muffin 114","qty":"4","status":"shipped","total":"208"},
+{"customer":"Ivy Brown","date":"2026-04-27","id":"b63330f7-4e44-47e6-bdfc-9992e08a2d45","order id":"ORD-1092","product":"Spiced Coffee 106","qty":"3","status":"paid","total":"321"},
+{"customer":"Gift Patel","date":"2026-02-20","id":"950993e6-f100-4224-981a-d293b4fb7dc7","order id":"ORD-1093","product":"Golden Muffin 072","qty":"5","status":"shipped","total":"1355"},
+{"customer":"Quinn Tanaka","date":"2026-06-16","id":"18f57022-2c8a-4bcc-bfd2-0a3c46a29667","order id":"ORD-1094","product":"Fresh Coffee 012","qty":"4","status":"refunded","total":"456"},
+{"customer":"Yui Chen","date":"2026-06-17","id":"4979a8d6-5a88-40df-94cd-76e61aa22a9e","order id":"ORD-1095","product":"Spiced Cocoa 022","qty":"4","status":"paid","total":"1056"},
+{"customer":"Zack Tanaka","date":"2026-06-02","id":"898261a0-2a66-4b2a-ac52-dd03e98f3422","order id":"ORD-1096","product":"Maple Syrup 137","qty":"5","status":"paid","total":"2160"},
+{"customer":"Fon Kim","date":"2026-03-19","id":"4b936d9e-5f4d-4055-a0b5-b2c5b7dc1c7e","order id":"ORD-1097","product":"Spiced Coffee 045","qty":"4","status":"shipped","total":"636"},
+{"customer":"Win Garcia","date":"2026-03-27","id":"a7bd8a43-0c18-4119-9145-ec2dcdebedf0","order id":"ORD-1098","product":"Spiced Tea 057","qty":"4","status":"refunded","total":"708"},
+{"customer":"Joe Rossi","date":"2026-02-23","id":"19a40cdb-b878-488f-960b-8c8ed222dd44","order id":"ORD-1099","product":"Vanilla Bagel 139","qty":"4","status":"delivered","total":"1768"},
+{"customer":"Oat Kim","date":"2026-08-16","id":"2088c3f1-d013-4fa3-a1c8-f32d21a3c6d7","order id":"ORD-1100","product":"Golden Cookie 055","qty":"1","status":"refunded","total":"402"},
+{"customer":"Win Smith","date":"2026-04-09","id":"598af24d-bea1-4fb5-99c1-30db789f13f3","order id":"ORD-1101","product":"Iced Croissant 025","qty":"3","status":"shipped","total":"630"},
+{"customer":"Ploy Brown","date":"2026-01-24","id":"73ae53f6-99b9-498e-b4d7-fbf0bf7326c1","order id":"ORD-1102","product":"Matcha Muffin 063","qty":"5","status":"delivered","total":"780"},
+{"customer":"Nok Kim","date":"2026-05-09","id":"591694c6-e1ca-46cc-a29c-f07e7a8c9df4","order id":"ORD-1103","product":"Maple Cookie 079","qty":"4","status":"paid","total":"1752"},
+{"customer":"Gift Patel","date":"2026-01-21","id":"f5930ada-0bfa-47b5-92b9-aa7ea04e1e62","order id":"ORD-1104","product":"Maple Coffee 026","qty":"2","status":"delivered","total":"614"},
+{"customer":"Lek Chen","date":"2026-01-23","id":"7d59bf6b-7c3d-4f2c-b78b-624a0a21bf27","order id":"ORD-1105","product":"Dark Croissant 080","qty":"4","status":"refunded","total":"688"},
+{"customer":"Quinn Rossi","date":"2026-02-28","id":"d0cc645f-2070-4255-817c-d3b43dfc5508","order id":"ORD-1106","product":"Golden Bagel 058","qty":"5","status":"delivered","total":"550"},
+{"customer":"Vee Brown","date":"2026-05-22","id":"0dae21a5-b238-49bf-8c8f-ce98a34956b5","order id":"ORD-1107","product":"Spiced Cookie 128","qty":"2","status":"paid","total":"828"},
+{"customer":"Win Kim","date":"2026-04-18","id":"f63c2a6c-6757-4adb-aba4-b6d37e8cb636","order id":"ORD-1108","product":"Maple Croissant 020","qty":"3","status":"delivered","total":"360"},
+{"customer":"Dan Nguyen","date":"2026-09-08","id":"27ea00ef-70b7-4adf-b9ab-67f3dad3543b","order id":"ORD-1109","product":"Golden Coffee 047","qty":"5","status":"paid","total":"1180"},
+{"customer":"Carla Lee","date":"2026-07-18","id":"746e088f-aded-46f8-9a28-ccbcbff7f760","order id":"ORD-1110","product":"Fresh Syrup 081","qty":"5","status":"refunded","total":"2110"},
+{"customer":"Lek Lee","date":"2026-05-27","id":"ca1c7480-52f4-4133-98ee-2c1155632f39","order id":"ORD-1111","product":"Maple Cookie 031","qty":"1","status":"paid","total":"471"},
+{"customer":"Yui Kim","date":"2026-08-02","id":"89e16052-9e29-4aaa-828c-33c32b40818e","order id":"ORD-1112","product":"Fresh Muffin 114","qty":"2","status":"paid","total":"182"},
+{"customer":"Zack Rossi","date":"2026-06-09","id":"99475824-aaa0-4c24-9a59-0f71b0fb43df","order id":"ORD-1113","product":"Vanilla Muffin 049","qty":"1","status":"refunded","total":"392"},
+{"customer":"Yui Chen","date":"2026-08-24","id":"167e12ae-5e60-4e65-905b-5996008f72b4","order id":"ORD-1114","product":"Matcha Cookie 123","qty":"1","status":"refunded","total":"130"},
+{"customer":"Gift Kim","date":"2026-03-09","id":"3547ec65-076c-4a55-a10e-4f94cdd1ca87","order id":"ORD-1115","product":"Vanilla Coffee 083","qty":"5","status":"delivered","total":"1120"},
+{"customer":"Win Tanaka","date":"2026-07-21","id":"3b5410e4-0204-42e8-b7d6-fd6c3452ed5c","order id":"ORD-1116","product":"Matcha Cookie 123","qty":"1","status":"shipped","total":"489"},
+{"customer":"Yui Patel","date":"2026-07-11","id":"fd332bfe-e8c8-45a1-b585-2d6384bf8719","order id":"ORD-1117","product":"Fresh Cookie 053","qty":"1","status":"refunded","total":"75"},
+{"customer":"Nok Kim","date":"2026-01-26","id":"0010550f-6e2e-40ae-92bb-0fde05a106c5","order id":"ORD-1118","product":"Golden Cookie 055","qty":"5","status":"delivered","total":"1450"},
+{"customer":"Nok Chen","date":"2026-05-28","id":"7a92fe26-9d4c-4c8e-8a47-4853beed03bf","order id":"ORD-1119","product":"Dark Cocoa 030","qty":"2","status":"paid","total":"180"},
+{"customer":"Fon Tanaka","date":"2026-01-26","id":"65d27d4f-e299-44c1-8624-e9e4512b03c8","order id":"ORD-1120","product":"Honey Cookie 051","qty":"2","status":"delivered","total":"416"},
+{"customer":"Elle Smith","date":"2026-01-09","id":"a4c319ee-de98-4451-a530-f2cc1f03bbd0","order id":"ORD-1121","product":"Spiced Muffin 003","qty":"2","status":"refunded","total":"510"},
+{"customer":"Win Smith","date":"2026-08-07","id":"27872495-da88-4dfd-b5e4-3818d938458b","order id":"ORD-1122","product":"Spiced Coffee 045","qty":"2","status":"paid","total":"432"},
+{"customer":"Som Nguyen","date":"2026-01-07","id":"30f37fc3-0dfd-4f6d-aba3-fdc50be1a46e","order id":"ORD-1123","product":"Golden Syrup 013","qty":"4","status":"shipped","total":"800"},
+{"customer":"Rin Kim","date":"2026-02-22","id":"12bcc9a4-739f-416c-b610-01b60536fe35","order id":"ORD-1124","product":"Maple Cocoa 101","qty":"4","status":"shipped","total":"872"},
+{"customer":"Yui Kim","date":"2026-03-02","id":"4a12f053-f4e5-4964-8c2c-7c8d5c4468e3","order id":"ORD-1125","product":"Iced Croissant 108","qty":"2","status":"paid","total":"146"},
+{"customer":"Carla Rossi","date":"2026-08-26","id":"f7c21b57-4499-4ec0-a7f7-73d9e5a7e876","order id":"ORD-1126","product":"Fresh Coffee 091","qty":"4","status":"delivered","total":"1568"},
+{"customer":"Mild Nguyen","date":"2026-08-28","id":"3e342653-b07d-4192-9672-e8de0f14bfbf","order id":"ORD-1127","product":"Matcha Muffin 063","qty":"3","status":"shipped","total":"1155"},
+{"customer":"Ploy Lee","date":"2026-08-02","id":"a0b7cb25-547a-42b7-9565-002ed13ecffc","order id":"ORD-1128","product":"Vanilla Syrup 132","qty":"1","status":"paid","total":"402"},
+{"customer":"Hana Brown","date":"2026-04-20","id":"c460c6a5-f3a0-4895-b2c4-6c4af042b806","order id":"ORD-1129","product":"Vanilla Syrup 018","qty":"5","status":"delivered","total":"2305"},
+{"customer":"Rin Tanaka","date":"2026-05-18","id":"5429f526-99e6-47b2-9fd7-6b463ce3e5a1","order id":"ORD-1130","product":"Fresh Coffee 012","qty":"4","status":"delivered","total":"1128"},
+{"customer":"Ivy Brown","date":"2026-08-12","id":"16e97227-c2c2-42b5-ba88-291cac0fd68a","order id":"ORD-1131","product":"Fresh Syrup 081","qty":"2","status":"delivered","total":"220"},
+{"customer":"Amy Garcia","date":"2026-05-23","id":"7918fa71-d8b5-4f03-a2c1-a0a36da86894","order id":"ORD-1132","product":"Matcha Coffee 116","qty":"5","status":"shipped","total":"330"},
+{"customer":"Lek Tanaka","date":"2026-07-20","id":"923ff7fe-0fad-410a-ae95-d7705d05376b","order id":"ORD-1133","product":"Fresh Cookie 103","qty":"5","status":"delivered","total":"1115"},
+{"customer":"Yui Patel","date":"2026-07-22","id":"588641d2-f98c-4eee-ad7f-fba5868c6651","order id":"ORD-1134","product":"Matcha Syrup 024","qty":"4","status":"shipped","total":"1124"},
+{"customer":"Quinn Tanaka","date":"2026-09-18","id":"45c48dd0-6398-4a44-a473-d1cb58579594","order id":"ORD-1135","product":"Golden Syrup 124","qty":"3","status":"delivered","total":"714"},
+{"customer":"Amy Brown","date":"2026-06-19","id":"2484fd60-136f-46b2-ac12-8b6a468dc2d2","order id":"ORD-1136","product":"Spiced Tea 057","qty":"4","status":"paid","total":"1748"},
+{"customer":"Oat Tanaka","date":"2026-01-05","id":"2ff8a29c-ee1b-4703-ade3-c5bbc0308570","order id":"ORD-1137","product":"Butter Tea 107","qty":"3","status":"refunded","total":"150"},
+{"customer":"Amy Garcia","date":"2026-01-27","id":"0ab0209b-c02a-4330-a053-6d11fa08c8d4","order id":"ORD-1138","product":"Vanilla Cookie 093","qty":"1","status":"delivered","total":"494"},
+{"customer":"Kan Garcia","date":"2026-09-15","id":"3c0c2ca2-70e4-4b1b-8c82-0e73fe5604b9","order id":"ORD-1139","product":"Vanilla Bagel 139","qty":"2","status":"refunded","total":"222"},
+{"customer":"Win Garcia","date":"2026-06-03","id":"a72dd0e4-4f52-41ad-a354-1f2844010db7","order id":"ORD-1140","product":"Spiced Muffin 003","qty":"1","status":"refunded","total":"156"},
+{"customer":"Gift Patel","date":"2026-03-15","id":"79bc474c-98a9-4b78-926c-b3864f8a54c0","order id":"ORD-1141","product":"Iced Syrup 097","qty":"3","status":"delivered","total":"480"},
+{"customer":"Amy Brown","date":"2026-03-13","id":"8c434647-ee3b-4ecd-8ede-a27721560c26","order id":"ORD-1142","product":"Golden Syrup 044","qty":"3","status":"paid","total":"1032"},
+{"customer":"Win Patel","date":"2026-05-09","id":"f4e812b7-63ce-4d2c-af46-63295b757914","order id":"ORD-1143","product":"Maple Cookie 029","qty":"2","status":"refunded","total":"818"},
+{"customer":"Nok Kim","date":"2026-03-19","id":"763ca282-1705-436e-bee4-82415b2df12c","order id":"ORD-1144","product":"Butter Tea 085","qty":"4","status":"refunded","total":"1204"},
+{"customer":"Hana Smith","date":"2026-09-28","id":"4219124a-f724-43ff-be80-dbfefdfdd0bc","order id":"ORD-1145","product":"Fresh Cookie 086","qty":"4","status":"paid","total":"1804"},
+{"customer":"Hana Rossi","date":"2026-01-03","id":"6414c3cb-2d6b-4854-a4f9-a0d53bcf34c5","order id":"ORD-1146","product":"Fresh Coffee 120","qty":"4","status":"delivered","total":"528"},
+{"customer":"Gift Garcia","date":"2026-03-11","id":"e3d174af-229a-4dc2-b77e-22428b5539bf","order id":"ORD-1147","product":"Butter Cookie 023","qty":"5","status":"refunded","total":"245"},
+{"customer":"Yui Nguyen","date":"2026-06-18","id":"4540dbca-3a93-4ca6-89f8-ceea7ccda536","order id":"ORD-1148","product":"Dark Croissant 080","qty":"3","status":"paid","total":"657"},
+{"customer":"Zack Rossi","date":"2026-02-21","id":"c8c122b1-1a72-4b9f-983b-424c27410341","order id":"ORD-1149","product":"Matcha Coffee 116","qty":"3","status":"delivered","total":"549"},
+{"customer":"Gift Smith","date":"2026-02-26","id":"a3067851-9131-4a63-88a7-ec669f03ba85","order id":"ORD-1150","product":"Golden Syrup 019","qty":"3","status":"paid","total":"1044"},
+{"customer":"Yui Kim","date":"2026-06-17","id":"d09c5bb8-9f44-4595-b803-829b4f3f7d3d","order id":"ORD-1151","product":"Vanilla Muffin 049","qty":"5","status":"paid","total":"1920"},
+{"customer":"Yui Patel","date":"2026-08-18","id":"227bc1c1-31c2-4f5f-a510-a1fd90f56ac2","order id":"ORD-1152","product":"Fresh Muffin 070","qty":"3","status":"refunded","total":"660"},
+{"customer":"Joe Rossi","date":"2026-05-03","id":"3a6ace3d-2d7c-4af8-8e81-f6341289582e","order id":"ORD-1153","product":"Matcha Muffin 063","qty":"3","status":"refunded","total":"849"},
+{"customer":"Lek Chen","date":"2026-02-13","id":"e86ce59a-0967-426d-bbca-03b2ebac91e5","order id":"ORD-1154","product":"Spiced Coffee 090","qty":"3","status":"shipped","total":"1422"},
+{"customer":"Som Garcia","date":"2026-05-02","id":"dba315df-389e-45d8-8849-e8df487cd637","order id":"ORD-1155","product":"Fresh Coffee 012","qty":"4","status":"delivered","total":"112"},
+{"customer":"Mild Nguyen","date":"2026-01-15","id":"9a509d19-3195-455d-840e-387d52452a86","order id":"ORD-1156","product":"Fresh Croissant 015","qty":"4","status":"paid","total":"428"},
+{"customer":"Yui Kim","date":"2026-02-12","id":"920032bb-6460-4b8d-a726-b55917fcf8ea","order id":"ORD-1157","product":"Dark Muffin 100","qty":"4","status":"refunded","total":"1564"},
+{"customer":"Vee Garcia","date":"2026-03-08","id":"ee88aee4-ea5c-43c0-a341-4b47248d1900","order id":"ORD-1158","product":"Butter Bagel 112","qty":"1","status":"shipped","total":"353"},
+{"customer":"Ivy Kim","date":"2026-09-05","id":"634ed3bb-498d-43c1-b9b0-d59797c19f00","order id":"ORD-1159","product":"Spiced Coffee 004","qty":"2","status":"paid","total":"288"},
+{"customer":"Oat Brown","date":"2026-05-06","id":"5bbc0557-561a-4e00-aa09-db2362eee97c","order id":"ORD-1160","product":"Butter Muffin 060","qty":"3","status":"shipped","total":"390"}
+];/*ORDERS*/
+var PLAY_COLS=["order id","customer","product","qty","total","date","status"];
+function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function playRows(){
+  var q=document.getElementById("p-q").value.trim().toLowerCase();
+  var st=document.getElementById("p-status").value;
+  var out=[];
+  for(var i=0;i<ORDERS.length;i++){
+    var r=ORDERS[i];
+    if(st&&String(r["status"]).toLowerCase().indexOf(st)<0)continue;
+    if(q){var hit=false;
+      for(var c=0;c<PLAY_COLS.length;c++){
+        if(String(r[PLAY_COLS[c]]).toLowerCase().indexOf(q)>=0){hit=true;break}
+      }
+      if(!hit)continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+function renderPlay(){
+  var limit=parseInt(document.getElementById("p-limit").value,10)||50;
+  var st=document.getElementById("p-status").value;
+  var q=document.getElementById("p-q").value.trim();
+  var matched=playRows(),total=matched.length;
+  var rows=matched.length>limit?matched.slice(0,limit):matched;
+  var qs="?limit="+limit;
+  if(st)qs+="&status="+st;
+  if(q)qs+="&q="+encodeURIComponent(q);
+  document.getElementById("p-qs").textContent=qs;
+  var lines=["{",
+    '  <span class="k">"columns"</span>: ["order id", "customer", "product", "qty", "total", "date", "status"],',
+    '  <span class="k">"limit"</span>: '+limit+",",
+    '  <span class="k">"offset"</span>: 0,'];
+  if(rows.length===0){
+    lines.push('  <span class="k">"rows"</span>: [],');
+  }else{
+    lines.push('  <span class="k">"rows"</span>: [');
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i],comma=i<rows.length-1?",":"";
+      lines.push('    { <span class="k">"customer"</span>: "'+escHtml(r["customer"])+'", <span class="k">"date"</span>: "'+escHtml(r["date"])+'", <span class="k">"id"</span>: "<span class="d">'+escHtml(r["id"])+'</span>",');
+      lines.push('      <span class="k">"order id"</span>: "'+escHtml(r["order id"])+'", <span class="k">"product"</span>: "'+escHtml(r["product"])+'", <span class="k">"qty"</span>: "'+escHtml(r["qty"])+'", <span class="k">"status"</span>: "'+escHtml(r["status"])+'",');
+      lines.push('      <span class="k">"total"</span>: "'+escHtml(r["total"])+'" }'+comma);
+    }
+    lines.push("  ],");
+  }
+  lines.push('  <span class="k">"total"</span>: '+total+",");
+  lines.push('  <span class="k">"types"</span>: ["text", "text", "text", "number", "number", "date", "text"]');
+  lines.push("}");
+  document.getElementById("p-out").innerHTML=lines.join("\n");
+}
+["p-limit","p-status"].forEach(function(id){
+  document.getElementById(id).addEventListener("change",renderPlay);
+});
+document.getElementById("p-q").addEventListener("input",renderPlay);
+renderPlay();
+</script>
+</body>
+</html>

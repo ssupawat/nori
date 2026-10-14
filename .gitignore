@@ -1,0 +1,17 @@
+# build output
+/nori
+*.test
+
+# runtime state (created by running nori)
+/data
+/backups
+*.log
+
+# frontend deps (ui/dist is committed on purpose: go:embed needs it)
+ui/node_modules/
+
+# zcode session tooling
+.zcode/
+
+# goreleaser output
+/dist/

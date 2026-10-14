@@ -1,0 +1,24 @@
+# Fly.io image: runs a release binary.
+#
+#   fly deploy --dockerfile Dockerfile.flyio --build-arg NORI_VERSION=v0.1.0-rc.1
+#
+# NORI_ARCH defaults to amd64; arm64 machines pass NORI_ARCH=arm64.
+FROM alpine:3.21
+ARG NORI_VERSION=v0.1.0-rc.1
+ARG NORI_ARCH=amd64
+WORKDIR /app
+RUN set -eux; \
+    apk add --no-cache curl unzip; \
+    VER="${NORI_VERSION#v}"; \
+    BASE="https://github.com/ssupawat/nori/releases/download/${NORI_VERSION}"; \
+    curl -fsSL -o nori.zip "${BASE}/nori_${VER}_linux_${NORI_ARCH}.zip"; \
+    curl -fsSL -o checksums.txt "${BASE}/checksums.txt"; \
+    grep "nori_${VER}_linux_${NORI_ARCH}.zip" checksums.txt | sha256sum -c -; \
+    unzip -o nori.zip -d /app; \
+    chmod +x /app/nori; \
+    rm -f nori.zip checksums.txt /app/LICENSE /app/README.md; \
+    apk del curl unzip
+
+EXPOSE 8080
+ENTRYPOINT ["/app/nori"]
+CMD ["-data", "/data/nori", "-backup-dir", "/data/backups", "-backup-every", "1h"]

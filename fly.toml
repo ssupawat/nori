@@ -1,0 +1,25 @@
+# One machine, one volume, one data file. nori is single-node by design:
+# never scale past one machine, since two machines cannot share a volume.
+app = "nori"
+primary_region = "sin"
+
+[build]
+
+[mounts]
+  source = "nori_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.checks]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/api/health"

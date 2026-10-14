@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+html {
+  color-scheme: light;
+}
+
+:root {
+  --brand: #18181b;
+  /* text over --brand, chosen for contrast; set from JS on branding load */
+  --brand-on: #ffffff;
+}
+
+/* white-label accent: default matches the monochrome look.
+   Declared as @utility so variants like data-[state=checked]:bg-brand compile. */
+@utility bg-brand {
+  background-color: var(--brand);
+}
+@utility border-brand {
+  border-color: var(--brand);
+}
+@utility text-brand-on {
+  color: var(--brand-on);
+}
+.bg-brand:hover {
+  filter: brightness(1.25);
+}
+
+button {
+  cursor: pointer;
+}
+
+[contenteditable]:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+/* enter-only motion; skipped entirely for users who prefer reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .anim-fade { animation: anim-fade 160ms ease-out; }
+  .anim-pop { animation: anim-pop 150ms ease-out; }
+  .anim-slide-left { animation: anim-slide-left 200ms ease-out; }
+  .anim-slide-up { animation: anim-slide-up 200ms ease-out; }
+  .anim-toast { animation: anim-toast 180ms ease-out; }
+
+  /* exits: bits-ui keeps the element mounted until these finish */
+  [data-state="closed"].anim-fade { animation: anim-fade-out 130ms ease-in forwards; }
+  [data-state="closed"].anim-pop { animation: anim-pop-out 130ms ease-in forwards; }
+  [data-state="closed"].anim-slide-left { animation: anim-slide-left-out 150ms ease-in forwards; }
+  [data-state="closed"].anim-slide-up { animation: anim-slide-up-out 150ms ease-in forwards; }
+}
+@keyframes anim-fade { from { opacity: 0; } }
+/* dialogs center via -translate-x/y-1/2, so the keyframe must carry it */
+@keyframes anim-pop { from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
+@keyframes anim-slide-left { from { transform: translateX(-100%); } }
+@keyframes anim-slide-up { from { transform: translateY(100%); } }
+/* toast keeps its -translate-x-1/2 positioning while nudging up */
+@keyframes anim-toast { from { opacity: 0; transform: translate(-50%, 8px); } }
+@keyframes anim-fade-out { to { opacity: 0; } }
+@keyframes anim-pop-out { to { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
+@keyframes anim-slide-left-out { to { transform: translateX(-100%); } }
+@keyframes anim-slide-up-out { to { transform: translateY(100%); } }
