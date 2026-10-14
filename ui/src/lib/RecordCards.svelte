@@ -25,6 +25,7 @@
     onduplicate,
     ondelete,
     onrenamecol,
+    emptyText = "No rows yet 🌱",
   } = $props();
 
   const checkboxCls =
@@ -75,10 +76,9 @@
 {#if rows.length === 0}
   <div class="rounded-lg border border-zinc-200 bg-white px-3 py-10 text-center text-zinc-500 shadow-sm md:hidden">
     <Inbox class="mx-auto mb-1 size-7 text-zinc-300" />
-    No rows yet 🌱
+    {emptyText}
   </div>
-{:else}
-  <div class="flex flex-col gap-2 md:hidden">
+{:else}  <div class="flex flex-col gap-2 md:hidden">
     {#each rows as row, i (row.id)}
       <div
         data-row-id={row.id}

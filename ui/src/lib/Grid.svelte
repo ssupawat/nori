@@ -38,6 +38,7 @@
     onduplicate,
     ondelete,
     onrenamecol,
+    emptyText = "No rows yet 🌱",
   } = $props();
 
   const checkboxCls =
@@ -381,7 +382,7 @@
         <tr>
           <td colspan={columns.length + (canEdit ? 2 : 1)} class="px-3 py-10 text-center text-zinc-500">
             <Inbox class="mx-auto mb-1 size-7 text-zinc-300" />
-            No rows yet 🌱
+            {emptyText}
           </td>
         </tr>
       {/each}

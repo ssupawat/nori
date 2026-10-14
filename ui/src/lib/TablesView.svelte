@@ -155,7 +155,12 @@
         method: "POST",
         body: JSON.stringify(empty),
       });
-      page = Math.floor(total / PAGE_SIZE) + 1;
+      // the new row sits at the end of the default order, so clear any
+      // filter and sort first - otherwise it lands outside the view - then
+      // jump past the last page; loadRows clamps back onto it
+      q = "";
+      sort = "";
+      page = Number.MAX_SAFE_INTEGER;
       focusRowId = created.id;
       showToast("Row added");
       await loadRows();
@@ -389,27 +394,36 @@
     </DropdownMenu.Trigger>
     <DropdownMenu.Portal>
       <DropdownMenu.Content class="z-50 min-w-48 rounded-md border border-zinc-200 bg-white py-1 shadow-md" align="end">
-        {#if auth.role === "admin"}
-          <DropdownMenu.Item class={menuItem} onSelect={() => onimport?.()}>
-            <Upload class="size-3.5" /> Import xlsx…
+        {#if !tables.current}
+          <!-- nothing selected: importing is the only action that works -->
+          {#if auth.role === "admin"}
+            <DropdownMenu.Item class={menuItem} onSelect={() => onimport?.()}>
+              <Upload class="size-3.5" /> Import xlsx…
+            </DropdownMenu.Item>
+          {/if}
+        {:else}
+          {#if auth.role === "admin"}
+            <DropdownMenu.Item class={menuItem} onSelect={() => onimport?.()}>
+              <Upload class="size-3.5" /> Import xlsx…
+            </DropdownMenu.Item>
+            <DropdownMenu.Item class={menuItem} onSelect={() => (addColumnOpen = true)}>
+              <Plus class="size-3.5" /> Add column
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              class={menuItem}
+              onSelect={() => askPrompt("Rename table", "New table name", tables.current, renameTable)}
+            >
+              <Pencil class="size-3.5" /> Rename table
+            </DropdownMenu.Item>
+          {/if}
+          <DropdownMenu.Item class={menuItem} onSelect={exportXlsx}>
+            <Download class="size-3.5" /> Export xlsx
           </DropdownMenu.Item>
-          <DropdownMenu.Item class={menuItem} onSelect={() => (addColumnOpen = true)}>
-            <Plus class="size-3.5" /> Add column
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            class={menuItem}
-            onSelect={() => askPrompt("Rename table", "New table name", tables.current, renameTable)}
-          >
-            <Pencil class="size-3.5" /> Rename table
-          </DropdownMenu.Item>
-        {/if}
-        <DropdownMenu.Item class={menuItem} onSelect={exportXlsx}>
-          <Download class="size-3.5" /> Export xlsx
-        </DropdownMenu.Item>
-        {#if auth.role === "admin"}
-          <DropdownMenu.Item class={menuItemDanger} onSelect={deleteTable}>
-            <Trash class="size-3.5" /> Delete table
-          </DropdownMenu.Item>
+          {#if auth.role === "admin"}
+            <DropdownMenu.Item class={menuItemDanger} onSelect={deleteTable}>
+              <Trash class="size-3.5" /> Delete table
+            </DropdownMenu.Item>
+          {/if}
         {/if}
       </DropdownMenu.Content>
     </DropdownMenu.Portal>
@@ -522,6 +536,7 @@
     onduplicate={duplicateRow}
     ondelete={deleteRow}
     onrenamecol={askRenameColumn}
+    emptyText={q ? "No rows match the search." : "No rows yet 🌱"}
   />
   <!-- Mobile: record cards + tap-to-edit sheet -->
   <RecordCards
@@ -538,6 +553,7 @@
     onduplicate={duplicateRow}
     ondelete={deleteRow}
     onrenamecol={askRenameColumn}
+    emptyText={q ? "No rows match the search." : "No rows yet 🌱"}
   />
   {#if canEdit()}
     {#if selected.size > 0}
