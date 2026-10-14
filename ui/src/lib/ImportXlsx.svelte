@@ -18,11 +18,12 @@
     fileInput.click();
   }
 
-  // host already holds the bytes (e.g. the sample workbook): skip the picker
-  export function loadFile(f) {
+  // host already holds the bytes (the sample workbook): import right away
+  // in replace mode - a sample seeds a demo, there is nothing to append to
+  export async function loadFile(f) {
     file = f;
     mode = "replace";
-    open = true;
+    await run();
   }
 
   function chosen(e) {
@@ -34,6 +35,10 @@
 
   async function submit(e) {
     e.preventDefault();
+    await run();
+  }
+
+  async function run() {
     if (!file || busy) return;
     busy = true;
     const prev = tables.current;
@@ -77,6 +82,8 @@
         Every sheet in the file becomes a table.
       </Dialog.Description>
       <form onsubmit={submit} class="flex flex-col gap-2">
+        <!-- replace vs append only differs when tables already exist -->
+        {#if tables.list.length > 0}
         <label class={optCls}>
           <input type="radio" bind:group={mode} value="replace" class="mt-1 accent-zinc-900" />
           <span>
@@ -95,6 +102,7 @@
             </span>
           </span>
         </label>
+        {/if}
         <div class="mt-1 flex justify-end gap-2">
           <Dialog.Close
             class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
