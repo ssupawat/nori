@@ -1,6 +1,6 @@
 # One machine, one volume, one data file. nori is single-node by design:
 # never scale past one machine, since two machines cannot share a volume.
-app = "nori"
+app = "nori-change-me"
 primary_region = "sin"
 
 [build]
@@ -17,7 +17,7 @@ primary_region = "sin"
   min_machines_running = 1
   processes = ["app"]
 
-  [http_service.checks]
+  [[http_service.checks]]
     interval = "30s"
     timeout = "5s"
     grace_period = "10s"
