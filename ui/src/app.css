@@ -4,6 +4,38 @@ html {
   color-scheme: light;
 }
 
+/* Dark mode follows the OS. Rather than a dark: variant on every class,
+   the zinc scale is remapped (light <-> dark) and white surfaces turn dark;
+   the few places that need literal white use text-[#fff]. The default
+   near-black brand flips to near-white in branding.svelte.js. */
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+  :root {
+    --color-white: #18181b;
+    --color-zinc-50: #111113;
+    --color-zinc-100: #27272a;
+    --color-zinc-200: #34343a;
+    --color-zinc-300: #46464e;
+    --color-zinc-400: #71717a;
+    --color-zinc-500: #a1a1aa;
+    --color-zinc-600: #b4b4bc;
+    --color-zinc-700: #d4d4d8;
+    --color-zinc-800: #e4e4e7;
+    --color-zinc-900: #f4f4f5;
+    --color-zinc-950: #fafafa;
+    --color-amber-50: #2b2108;
+    --color-amber-800: #fcd34d;
+    --color-red-50: #2d1212;
+    --color-red-200: #6b2020;
+  }
+  body {
+    background-color: #0c0c0e;
+    color: var(--color-zinc-900);
+  }
+}
+
 :root {
   --brand: #18181b;
   /* text over --brand, chosen for contrast; set from JS on branding load */
@@ -80,4 +112,16 @@ button {
 td[tabindex]:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
+}
+
+/* table letter tiles (TableIcon): one hue per table name */
+.table-tile {
+  background-color: hsl(var(--tile-h) 70% 90%);
+  color: hsl(var(--tile-h) 55% 28%);
+}
+@media (prefers-color-scheme: dark) {
+  .table-tile {
+    background-color: hsl(var(--tile-h) 35% 24%);
+    color: hsl(var(--tile-h) 70% 82%);
+  }
 }

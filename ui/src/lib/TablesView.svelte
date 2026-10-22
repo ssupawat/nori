@@ -17,6 +17,7 @@
   import X from "@lucide/svelte/icons/x";
   import Pencil from "@lucide/svelte/icons/pencil";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import Columns3 from "@lucide/svelte/icons/columns-3";
   import { api } from "./api.js";
   import { auth, canEdit } from "./auth.svelte.js";
   import { tables, refreshTables, openTable, closeTable } from "./tables.svelte.js";
@@ -28,6 +29,7 @@
   import PromptDialog from "./PromptDialog.svelte";
   import CopyButton from "./CopyButton.svelte";
   import GenArt from "./GenArt.svelte";
+  import TableIcon from "./TableIcon.svelte";
 
   let { onimport, ongoto } = $props();
 
@@ -285,7 +287,10 @@
   let promptWithType = $state(false);
   let promptColType = $state("text");
 
-  function askPrompt(title, label, value, fn, { withType = false, colType = "text", warning = "", submitLabel = "Save" } = {}) {
+  let promptDanger = $state(null);
+
+  function askPrompt(title, label, value, fn, { withType = false, colType = "text", warning = "", submitLabel = "Save", danger = null } = {}) {
+    promptDanger = danger;
     promptTitle = title;
     promptLabel = label;
     promptValue = value;
@@ -452,6 +457,7 @@
         withType: true,
         colType: origType,
         submitLabel: "Save",
+        danger: { label: "Delete column", run: () => deleteColumn(col) },
         warning: `Renaming changes the field name every app and agent reads and writes ("${col}").`,
       }
     );
@@ -629,10 +635,16 @@
   ><CircleHelp class="size-4" /></button>
 {/snippet}
 
+<!-- desktop: the page title (table + row count) with its actions, then
+     the search row -->
 <div class="mb-3 hidden flex-wrap items-center gap-2 md:flex">
-  {@render searchBox("w-56")}
-  {@render helpButton()}
-  {@render chips()}
+  {#if tables.current}
+    <h2 class="flex min-w-0 items-center gap-2.5 text-xl font-semibold tracking-tight text-zinc-900">
+      <TableIcon name={tables.current} class="size-7 text-sm" />
+      <span class="truncate">{tables.current}</span>
+      <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 tabular-nums">{loading ? "…" : `${total.toLocaleString()} row${total === 1 ? "" : "s"}`}</span>
+    </h2>
+  {/if}
   <span class="flex-1"></span>
   {#if saveState}
     <span class="text-xs {saveState === 'error' ? 'text-red-600' : 'text-zinc-500'}" aria-live="polite">
@@ -649,6 +661,11 @@
     {/if}
   {/if}
   {@render tableMenuButton()}
+</div>
+<div class="mb-3 hidden flex-wrap items-center gap-2 md:flex">
+  {@render searchBox("w-64")}
+  {@render helpButton()}
+  {@render chips()}
 </div>
 
 {#snippet tableMenuButton()}
@@ -672,6 +689,19 @@
             <DropdownMenu.Item class={menuItem} onSelect={() => (addColumnOpen = true)}>
               <Plus class="size-3.5" /> Add column
             </DropdownMenu.Item>
+            {#if columns.length > 0}
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger class="{menuItem} justify-between">
+                  <span class="flex items-center gap-2"><Columns3 class="size-3.5" /> Edit a column</span>
+                  <ChevronRight class="size-3.5 text-zinc-500" />
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent class="z-50 max-h-72 min-w-40 overflow-y-auto rounded-md border border-zinc-200 bg-white py-1 shadow-md" sideOffset={4}>
+                  {#each columns as col (col)}
+                    <DropdownMenu.Item class={menuItem} onSelect={() => askRenameColumn(col)}>{col}</DropdownMenu.Item>
+                  {/each}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            {/if}
             <DropdownMenu.Item class={menuItem} onSelect={askRenameTable}>
               <Pencil class="size-3.5" /> Rename table
             </DropdownMenu.Item>
@@ -693,11 +723,11 @@
 <!-- Mobile: table picker (the bottom bar has one Tables tab, not one tab
      per table), then search + overflow menu -->
 {#if tables.list.length > 0}
-  <div class="mb-2 md:hidden">
+  <div class="mb-2 flex items-center gap-2 md:hidden">
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger class="flex w-full items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium" aria-label="Choose table">
+      <DropdownMenu.Trigger class="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base font-semibold" aria-label="Choose table">
         <span class="flex min-w-0 items-center gap-2">
-          {#if tables.current}<GenArt seed={tables.current} variant={3} w={64} h={64} class="size-5 shrink-0 rounded-md border border-zinc-200" />{/if}
+          {#if tables.current}<TableIcon name={tables.current} />{/if}
           <span class="truncate">{tables.current ?? "Choose a table"}</span>
         </span>
         <ChevronDown class="size-4 shrink-0 text-zinc-500" />
@@ -706,13 +736,22 @@
         <DropdownMenu.Content class="z-50 max-h-80 w-[var(--bits-dropdown-menu-anchor-width)] overflow-y-auto rounded-md border border-zinc-200 bg-white py-1 shadow-md" align="start">
           {#each tables.list as t (t.name)}
             <DropdownMenu.Item class="{menuItem} {t.name === tables.current ? 'font-semibold' : ''}" onSelect={() => openTable(t.name)}>
-              <GenArt seed={t.name} variant={3} w={64} h={64} class="size-5 shrink-0 rounded-md border border-zinc-200" />
+              <TableIcon name={t.name} />
               <span class="truncate">{t.name}</span>
             </DropdownMenu.Item>
           {/each}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+    {#if tables.current}
+      <CopyButton
+        class="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-xs text-zinc-700"
+        iconClass="size-3.5"
+        title="Copy a ready curl for this table (set $NORI_API_KEY to a key from the Access page)"
+        label="curl"
+        text={curlText}
+      />
+    {/if}
   </div>
 {/if}
 <div class="mb-3 flex flex-wrap items-center gap-2 md:hidden">
@@ -755,7 +794,7 @@
 
 {#if tables.current}
   <!-- the table's read path, kept next to the data -->
-  <div class="mb-3 flex items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5">
+  <div class="mb-3 hidden items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 md:flex">
     <span class="shrink-0 rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">API</span>
     <code class="min-w-0 flex-1 truncate font-mono text-xs text-zinc-600" title="Read this table over the API">
       GET /api/tables/{tables.current}/rows
@@ -821,7 +860,6 @@
     invalid={invalidCell}
     {focusRowId}
     canEdit={canEdit()}
-    renameable={auth.role === "admin"}
     {selected}
     onsave={saveCell}
     onselect={toggleSelect}
@@ -839,7 +877,7 @@
         <span class="flex-1 pl-2 text-sm font-medium">{selected.size} selected</span>
         <button class="rounded-lg px-2.5 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100" onclick={clearSelection}>Clear</button>
         <button
-          class="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          class="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-[#fff] disabled:opacity-50"
           onclick={deleteSelected}
           disabled={deleting}
         ><Trash2 class="size-3.5" /> {deleting ? "Deleting…" : "Delete"}</button>
@@ -907,6 +945,7 @@
   label={promptLabel}
   warning={promptWarning}
   submitLabel={promptSubmitLabel}
+  danger={promptDanger}
   onsubmit={(v, t) => promptSubmit?.(v, t)}
 />
 

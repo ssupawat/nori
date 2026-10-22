@@ -5,7 +5,6 @@
   import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Inbox from "@lucide/svelte/icons/inbox";
-  import Pencil from "@lucide/svelte/icons/pencil";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import X from "@lucide/svelte/icons/x";
   import { utcToLocalInput, localInputToUtc, sameInstant, dtDisplay } from "./fmt.js";
@@ -20,7 +19,6 @@
     loading = false,
     saveState = "",
     canEdit,
-    renameable = false,
     selected,
     onsave,
     onselect,
@@ -146,9 +144,9 @@
           >
             {#snippet children({ checked, indeterminate })}
               {#if indeterminate}
-                <Minus class="size-3 text-white" />
+                <Minus class="size-3 text-brand-on" />
               {:else if checked}
-                <Check class="size-3 text-white" />
+                <Check class="size-3 text-brand-on" />
               {/if}
             {/snippet}
           </Checkbox.Root>
@@ -166,7 +164,7 @@
           {/each}
         </div>
         <div class="flex shrink-0 items-center gap-1 self-center text-zinc-300">
-          <span class="font-mono text-xs text-zinc-500 tabular-nums">#{i + 1}</span>
+          <span class="text-xs text-zinc-500 tabular-nums">#{i + 1}</span>
           <ChevronRight class="size-4" />
         </div>
       </div>
@@ -201,17 +199,7 @@
             <label class="block">
               <span class="mb-1 flex items-center gap-1 text-xs font-medium text-zinc-500">
                 {col}
-                {#if renameable}
-                  <button
-                    type="button"
-                    class="rounded p-1 text-zinc-500 hover:text-zinc-900"
-                    aria-label="Rename column {col}"
-                    onclick={() => {
-                      sheetOpen = false;
-                      onrenamecol?.(col);
-                    }}
-                  ><Pencil class="size-3" /></button>
-                {/if}
+
               </span>
               {#if types[j] === "date"}
                 <input
@@ -252,7 +240,7 @@
               }}
             ><CopyPlus class="size-3.5" /> Duplicate</button>
             <button
-              class="ml-auto flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+              class="ml-auto flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-[#fff] hover:bg-red-700"
               onclick={() => {
                 sheetOpen = false;
                 ondelete(sheetRow);

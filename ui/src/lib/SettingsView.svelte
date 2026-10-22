@@ -10,6 +10,7 @@
   import { Select } from "bits-ui";
   import { inputCls, selectTrigger, selectContent, selectItem } from "./cls.js";
   import GenArt from "./GenArt.svelte";
+  import { scheme } from "./scheme.svelte.js";
 
   let name = $state("");
   let tagline = $state("");
@@ -129,10 +130,10 @@
   }
 </script>
 
-<div class="mx-auto w-full max-w-4xl">
+<div class="w-full max-w-5xl">
   <div class="mb-3">
-    <h2 class="text-sm font-semibold">Settings</h2>
-    <p class="text-xs text-zinc-500">Branding for this instance, and your account</p>
+    <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Settings</h2>
+    <p class="mt-0.5 text-sm text-zinc-500">Branding for this instance, and your account</p>
   </div>
 
   <div class="flex flex-col gap-4 lg:grid lg:grid-cols-2">
@@ -170,6 +171,9 @@
       </div>
       {#if !colorValid}
         <span class="text-xs text-red-600" role="alert">Use a hex color like #1d4ed8</span>
+      {/if}
+      {#if scheme.dark && colorValid && /^#(0|1|2)[0-9a-f](0|1|2)[0-9a-f](0|1|2)[0-9a-f]$/i.test(color)}
+        <span class="text-xs text-zinc-500">Near-black accents show as near-white in dark mode.</span>
       {/if}
     </div>
 
@@ -250,7 +254,7 @@
       <div class="flex flex-col gap-1">
         <span class="text-xs text-zinc-500">Date order for ambiguous dates like 3/4/2026</span>
         <Select.Root type="single" bind:value={dateOrder}>
-          <Select.Trigger class="{selectTrigger} w-64">
+          <Select.Trigger class="{selectTrigger} w-80 max-w-full">
             <span class="truncate">{dateOrder === "mdy" ? "M/D/YYYY (3/4/2026 = Mar 4, 2026)" : "D/M/YYYY (3/4/2026 = 3 Apr 2026)"}</span>
             <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
           </Select.Trigger>

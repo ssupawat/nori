@@ -8,13 +8,15 @@
 
   let canvas;
   let timer;
+  const dark = window.matchMedia?.("(prefers-color-scheme: dark)");
 
   function paint() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     const ctx = canvas.getContext("2d");
     drawArt(ctx, canvas.width, canvas.height, branding.name, hash(branding.name) % 3, hueFromHex(branding.color));
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    // wash toward the page color: light in light mode, dark in dark mode
+    ctx.fillStyle = dark?.matches ? "rgba(12,12,14,0.93)" : "rgba(255,255,255,0.92)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -26,8 +28,10 @@
   $effect(() => {
     paint();
     window.addEventListener("resize", onResize);
+    dark?.addEventListener?.("change", paint);
     return () => {
       window.removeEventListener("resize", onResize);
+      dark?.removeEventListener?.("change", paint);
       clearTimeout(timer);
     };
   });

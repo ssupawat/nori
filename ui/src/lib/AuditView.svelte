@@ -58,10 +58,10 @@
 
 </script>
 
-<div class="mx-auto w-full max-w-4xl">
+<div class="w-full max-w-5xl">
   <div class="mb-3">
-    <h2 class="text-sm font-semibold">Audit</h2>
-    <p class="text-xs text-zinc-500">Who changed what, newest first</p>
+    <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Audit</h2>
+    <p class="mt-0.5 text-sm text-zinc-500">Who changed what, newest first</p>
   </div>
 
   <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -109,7 +109,8 @@
   <!-- two layers: the static frame insets the scroll window, so rows sliced
        while scrolling never touch the card border directly -->
   <div class="rounded-lg border border-zinc-200 bg-white p-2">
-    <div class="h-[544px] overflow-y-auto">
+    <!-- max-h, not h: an empty trail is not a tall empty frame -->
+    <div class="max-h-[544px] overflow-y-auto">
       <ul class="divide-y divide-zinc-200">
       {#each entries as e, i (i)}
         {@const vals = e.values ?? {}}

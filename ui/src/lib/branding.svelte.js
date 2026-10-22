@@ -34,10 +34,23 @@ export async function loadBranding() {
     const b = await res.json();
     Object.assign(branding, b);
     document.title = b.name;
-    const root = document.documentElement;
-    root.style.setProperty("--brand", b.color);
-    root.style.setProperty("--brand-on", textOver(b.color));
+    applyBrandColor();
   } catch {
     // offline / old binary - keep defaults
   }
 }
+
+// In dark mode a near-black accent (the default) would vanish into the
+// background, so it flips to near-white; any other brand color is kept.
+const darkQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+
+function applyBrandColor() {
+  let color = branding.color;
+  if (darkQuery?.matches && luminance(color) < 0.03) color = "#f4f4f5";
+  const root = document.documentElement;
+  root.style.setProperty("--brand", color);
+  root.style.setProperty("--brand-on", textOver(color));
+}
+
+darkQuery?.addEventListener?.("change", applyBrandColor);
+applyBrandColor();
