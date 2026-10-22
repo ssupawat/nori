@@ -13,6 +13,10 @@ import (
 // MaxImportBytes caps the multipart upload body of POST /api/import.
 var MaxImportBytes int64 = 64 << 20
 
+// errStopImport stops ParseStream after a table has already failed and
+// the HTTP error response is written.
+var errStopImport = errors.New("stop import")
+
 func (sv *Server) importXlsx(w http.ResponseWriter, r *http.Request) {
 	// imports are heavy and rare — serialize them so concurrent
 	// mode=replace imports of one table cannot race on staging
@@ -41,30 +45,38 @@ func (sv *Server) importXlsx(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	tables, err := sheetimport.Parse(file)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	for _, tb := range tables {
-		cols := sv.store.DetectColumns(tb.Columns, tb.Rows)
+	summary := make([]map[string]any, 0, 4)
+	err = sheetimport.ParseStream(file, func(tb sheetimport.TableStream) error {
+		// Sample (first page) drives column type detection only; tb.Rows
+		// yields every row, sample included.
+		cols := sv.store.DetectColumns(tb.Columns, tb.Sample)
+		var (
+			n   int
+			err error
+		)
 		if mode == "replace" {
-			err = sv.store.ReplaceTable(tb.Name, cols, tb.Rows)
+			n, err = sv.store.ReplaceTableStream(tb.Name, cols, tb.Rows)
 		} else {
-			err = sv.store.AppendTable(tb.Name, cols, tb.Rows)
+			n, err = sv.store.AppendTableStream(tb.Name, cols, tb.Rows)
 		}
 		if mapStoreErr(w, err) {
-			return
+			return errStopImport
 		}
-	}
-	summary := make([]map[string]any, 0, len(tables))
-	for _, tb := range tables {
-		sv.auditEvent(r, "import", tb.Name, "", map[string]string{"mode": mode, "rows": strconv.Itoa(len(tb.Rows))})
+		sv.auditEvent(r, "import", tb.Name, "", map[string]string{"mode": mode, "rows": strconv.Itoa(n)})
 		summary = append(summary, map[string]any{
 			"name":    tb.Name,
 			"columns": tb.Columns,
-			"rows":    len(tb.Rows),
+			"rows":    n,
 		})
+		return nil
+	})
+	if err != nil && !errors.Is(err, errStopImport) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(summary) == 0 {
+		writeError(w, http.StatusBadRequest, "no sheets with data found")
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mode": mode, "tables": summary})
 }

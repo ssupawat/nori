@@ -662,3 +662,142 @@ func (s *Store) normalizeRows(columns []Column, rows []map[string]string) {
 		}
 	}
 }
+
+// ReplaceTableStream behaves like ReplaceTable but receives rows in pages,
+// so the whole table never has to live in memory at once. The row cap is
+// enforced by a running count; exceeding it drops the staging copy and
+// leaves the live table untouched. Returns the number of rows written.
+func (s *Store) ReplaceTableStream(name string, columns []Column, pages func(yield func([]map[string]string) error) error) (int, error) {
+	if strings.HasPrefix(name, "_") || strings.TrimSpace(name) == "" || !validName(name) {
+		return 0, invalidf("invalid table name %q", name)
+	}
+	for _, c := range columns {
+		if ReservedColName(c.Name) || !validName(c.Name) {
+			return 0, invalidf("invalid column name %q (reserved or control characters)", c.Name)
+		}
+	}
+	if len(columns) > MaxTableCols {
+		return 0, fmt.Errorf("%w: import has %d columns, max is %d", ErrTooManyCols, len(columns), MaxTableCols)
+	}
+	s.tablesMu.Lock()
+	defer s.tablesMu.Unlock()
+	staging := stagingPrefix + name
+	if exists, err := s.db.HasCollection(staging); err == nil && exists {
+		if err := s.db.DropCollection(staging); err != nil {
+			return 0, err
+		}
+	}
+	if err := s.db.CreateCollection(staging); err != nil {
+		return 0, err
+	}
+	if err := s.saveMeta(staging, columns); err != nil {
+		return 0, err
+	}
+	count := 0
+	err := pages(func(page []map[string]string) error {
+		s.normalizeRows(columns, page)
+		// seq must stay continuous across pages: insertAllFrom numbers
+		// rows seqBase+1..seqBase+len(page)
+		if err := s.insertAllFrom(staging, page, int64(count)); err != nil {
+			return err
+		}
+		count += len(page)
+		if count > MaxTableRows {
+			return fmt.Errorf("%w: import exceeds %d rows, max is %d", ErrTableFull, MaxTableRows, MaxTableRows)
+		}
+		return nil
+	})
+	if err != nil {
+		s.db.DropCollection(staging)
+		s.invalidateRows(staging)
+		return 0, err
+	}
+	// from here the staging copy is complete: mark the swap, then commit
+	if err := s.markSwap(name, false, ""); err != nil {
+		return 0, err
+	}
+	return count, s.finishSwap(name, staging, false, "")
+}
+
+// AppendTableStream behaves like AppendTable but receives rows in pages.
+// Unlike ReplaceTableStream there is no staging copy: pages are appended
+// to the live table as they arrive, so a row-cap overflow leaves the
+// already-appended pages in place (append was never atomic, see
+// AppendTable). Returns the number of rows appended.
+func (s *Store) AppendTableStream(name string, columns []Column, pages func(yield func([]map[string]string) error) error) (int, error) {
+	if strings.HasPrefix(name, "_") || strings.TrimSpace(name) == "" || !validName(name) {
+		return 0, invalidf("invalid table name %q", name)
+	}
+	for _, c := range columns {
+		if ReservedColName(c.Name) || !validName(c.Name) {
+			return 0, invalidf("invalid column name %q (reserved or control characters)", c.Name)
+		}
+	}
+	if len(columns) > MaxTableCols {
+		return 0, fmt.Errorf("%w: import has %d columns, max is %d", ErrTooManyCols, len(columns), MaxTableCols)
+	}
+	s.tablesMu.Lock()
+	defer s.tablesMu.Unlock()
+	exists, err := s.TableExists(name)
+	if err != nil {
+		return 0, err
+	}
+	if !exists {
+		if err := s.db.CreateCollection(name); err != nil {
+			return 0, err
+		}
+		if err := s.saveMeta(name, columns); err != nil {
+			return 0, err
+		}
+	} else {
+		current, err := s.GetColumnsMeta(name)
+		if err != nil {
+			return 0, err
+		}
+		merged := append([]Column{}, current...)
+		for _, c := range columns {
+			if !containsColumn(merged, c.Name) {
+				merged = append(merged, c)
+			}
+		}
+		if len(merged) > MaxTableCols {
+			return 0, fmt.Errorf("%w: merge would give %d columns, max is %d", ErrTooManyCols, len(merged), MaxTableCols)
+		}
+		if err := s.saveMeta(name, merged); err != nil {
+			return 0, err
+		}
+	}
+	existing, err := s.db.Count(query.NewQuery(name))
+	if err != nil {
+		return 0, err
+	}
+	maxSeq, err := s.maxSeq(name)
+	if err != nil {
+		return 0, err
+	}
+	appended := 0
+	defer s.invalidateRows(name)
+	err = pages(func(page []map[string]string) error {
+		s.normalizeRows(columns, page)
+		if err := s.insertAllFrom(name, page, maxSeq+int64(appended)); err != nil {
+			return err
+		}
+		appended += len(page)
+		if existing+appended > MaxTableRows {
+			return fmt.Errorf("%w: append would give %d rows, max is %d", ErrTableFull, existing+appended, MaxTableRows)
+		}
+		return nil
+	})
+	return appended, err
+}
+
+// maxSeq returns the largest seq value in a table without loading it.
+func (s *Store) maxSeq(table string) (int64, error) {
+	q := query.NewQuery(table).Sort(query.SortOption{Field: "seq", Direction: -1}).Limit(1)
+	doc, err := s.db.FindFirst(q)
+	if err != nil || doc == nil {
+		return 0, err
+	}
+	seq, _ := doc.Get("seq").(int64)
+	return seq, nil
+}
