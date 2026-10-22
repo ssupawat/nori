@@ -26,8 +26,8 @@ import (
 	"nori/internal/store"
 )
 
-// The UI build output (npm run build in ui/). A built copy is
-// committed so `go build` works without Node.
+// The UI build output (npm run build in ui/). Only ui/dist/.gitkeep is
+// tracked; without a UI build the binary serves a notice instead.
 //
 //go:embed all:ui/dist
 var webFiles embed.FS
@@ -243,6 +243,15 @@ func main() {
 }
 
 func spaHandler(fsys fs.FS) http.Handler {
+	if _, err := fs.Stat(fsys, "index.html"); err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintln(w, "This nori binary was built without the dashboard.")
+			fmt.Fprintln(w, "Build it with: (cd ui && npm ci && npm run build) && go build .")
+			fmt.Fprintln(w, "The API under /api works as usual.")
+		})
+	}
 	fileServer := http.FileServer(http.FS(fsys))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
