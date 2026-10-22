@@ -34,6 +34,18 @@ button {
   outline-offset: -2px;
 }
 
+/* iOS Safari auto-zooms the viewport when a text field below 16px is
+   focused and never zooms back out - keep text fields at 16px on phones */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
 /* enter-only motion; skipped entirely for users who prefer reduced motion */
 @media (prefers-reduced-motion: no-preference) {
   .anim-fade { animation: anim-fade 160ms ease-out; }

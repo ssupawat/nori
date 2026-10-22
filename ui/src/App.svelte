@@ -171,11 +171,17 @@
       {/each}
       <button
         class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-        onclick={() => (newTableOpen = true)}
+        onclick={() => {
+          drawerOpen = false;
+          newTableOpen = true;
+        }}
       ><Plus class="size-4 shrink-0" /> New table</button>
       <button
         class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-        onclick={() => importRef.pick()}
+        onclick={() => {
+          drawerOpen = false;
+          importRef.pick();
+        }}
       ><Upload class="size-4 shrink-0" /> Import xlsx</button>
     </div>
     <!-- mt-auto pins System to the sidebar's bottom when content is short;
