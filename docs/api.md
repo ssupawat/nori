@@ -39,13 +39,15 @@ DELETE /api/tables/{t}/rows/{id}                                           edito
 GET    /api/tables/{t}/export                   download .xlsx
 POST   /api/tables/{t}/columns                  {"name":"New col","type":"number"}   admin
 PATCH  /api/tables/{t}/columns/{col}            {"name":"Renamed","type":"date"}     admin
+DELETE /api/tables/{t}/columns/{col}            drop column and its values     admin
 PATCH  /api/tables/{t}                          {"name":"Renamed"}         admin
 DELETE /api/tables/{t}                          drop table                 admin
 
 POST   /api/import             multipart: file=.xlsx, mode=replace|append   admin
 GET    /api/sample.xlsx        generated sample workbook (admin) - import it to try the loop without a file
 GET    /api/users · POST /api/users (no password = generated, returned once) ·
-       PATCH /api/users/{name} {"password"} · DELETE /api/users/{name}   admin (PATCH revokes that user's sessions)
+       PATCH /api/users/{name} {"password"} and/or {"role"} · DELETE /api/users/{name}   admin
+       (a password change revokes that user's sessions; a role change applies at once; the last admin can't be demoted)
 POST   /api/me/password   {"currentPassword","password"} - change own password, any role (other sessions revoked)
 GET    /api/keys · POST /api/keys · DELETE /api/keys/{id}                  admin
 GET    /api/usage              {requests24h, byPath, byHour, tables:[{name,rows}], maxRows}   admin

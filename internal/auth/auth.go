@@ -314,6 +314,35 @@ func (s *Service) ChangeOwnPassword(username, current, newPassword, keepToken st
 	return s.db.Delete(q)
 }
 
+// SetRole changes a user's role. Roles are read per request, so it applies
+// to the user's existing sessions right away. The last admin cannot be
+// demoted, the same rule DeleteUser enforces.
+func (s *Service) SetRole(username string, role Role) error {
+	if !role.Valid() {
+		return ErrInvalidRole
+	}
+	doc, err := s.findUserDoc(username)
+	if err != nil {
+		return err
+	}
+	if doc == nil {
+		return ErrNotFound
+	}
+	if Role(doc.Get("role").(string)) == Admin && role != Admin {
+		admins, err := s.listUserDocs(Admin)
+		if err != nil {
+			return err
+		}
+		if len(admins) <= 1 {
+			return ErrLastAdmin
+		}
+	}
+	return s.db.UpdateById(usersCollection, doc.ObjectId(), func(doc *d.Document) *d.Document {
+		doc.Set("role", string(role))
+		return doc
+	})
+}
+
 func (s *Service) DeleteUser(username string) error {
 	doc, err := s.findUserDoc(username)
 	if err != nil {

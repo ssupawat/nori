@@ -344,3 +344,32 @@ func TestPasswordMinLength(t *testing.T) {
 		t.Fatalf("valid password rejected: %v", err)
 	}
 }
+
+func TestSetRoleKeepsOneAdmin(t *testing.T) {
+	// Arrange: a single admin and a viewer.
+	s := openTestAuth(t)
+	if _, err := s.EnsureAdmin("admin", "secretpw1"); err != nil {
+		t.Fatalf("ensure admin: %v", err)
+	}
+	if err := s.CreateUser("v", "longenough", Viewer); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Act + Assert: the only admin can't be demoted; once a second admin
+	// exists, the first one can be.
+	if err := s.SetRole("admin", Viewer); !errors.Is(err, ErrLastAdmin) {
+		t.Fatalf("want ErrLastAdmin, got %v", err)
+	}
+	if err := s.SetRole("v", "god"); !errors.Is(err, ErrInvalidRole) {
+		t.Fatalf("want ErrInvalidRole, got %v", err)
+	}
+	if err := s.SetRole("ghost", Viewer); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if err := s.SetRole("v", Admin); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if err := s.SetRole("admin", Editor); err != nil {
+		t.Fatalf("demote one of two admins: %v", err)
+	}
+}

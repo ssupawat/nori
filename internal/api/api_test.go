@@ -1571,3 +1571,66 @@ func TestAuditQueueCapWhileFailing(t *testing.T) {
 		t.Fatalf("expected drops, got 0 (queue=%d)", qlen)
 	}
 }
+
+func TestSetRoleAppliesToLiveSessions(t *testing.T) {
+	// Arrange: a viewer with a live session, and a table to write to.
+	env := newTestEnv(t)
+	adminTok := env.login("admin", "adminpw1")
+	env.do("POST", "/api/tables", adminTok, strings.NewReader(`{"name":"T","columns":[{"name":"a"}]}`))
+	env.do("POST", "/api/users", adminTok, strings.NewReader(`{"username":"rr","password":"rolepass9","role":"viewer"}`))
+	tok := env.login("rr", "rolepass9")
+	if res, _ := env.do("POST", "/api/tables/T/rows", tok, strings.NewReader(`{"a":"x"}`)); res.StatusCode != 403 {
+		t.Fatalf("viewer write should be 403, got %d", res.StatusCode)
+	}
+
+	// Act: promote to editor.
+	if res, _ := env.do("PATCH", "/api/users/rr", adminTok, strings.NewReader(`{"role":"editor"}`)); res.StatusCode != 200 {
+		t.Fatalf("set role: %d", res.StatusCode)
+	}
+
+	// Assert: the same session can write now, without signing in again.
+	if res, _ := env.do("POST", "/api/tables/T/rows", tok, strings.NewReader(`{"a":"x"}`)); res.StatusCode != 201 {
+		t.Fatalf("editor write should be 201, got %d", res.StatusCode)
+	}
+
+	// Assert: bad role, own role and last-admin demotion are refused.
+	if res, _ := env.do("PATCH", "/api/users/rr", adminTok, strings.NewReader(`{"role":"god"}`)); res.StatusCode != 400 {
+		t.Fatalf("invalid role should be 400, got %d", res.StatusCode)
+	}
+	if res, _ := env.do("PATCH", "/api/users/admin", adminTok, strings.NewReader(`{"role":"viewer"}`)); res.StatusCode != 400 {
+		t.Fatalf("own role change should be 400, got %d", res.StatusCode)
+	}
+}
+
+func TestDeleteColumnDropsValues(t *testing.T) {
+	// Arrange: a two-column table with one row.
+	env := newTestEnv(t)
+	tok := env.login("admin", "adminpw1")
+	env.do("POST", "/api/tables", tok, strings.NewReader(`{"name":"P","columns":[{"name":"name"},{"name":"age","type":"number"}]}`))
+	_, body := env.do("POST", "/api/tables/P/rows", tok, strings.NewReader(`{"name":"amy","age":"30"}`))
+	var created map[string]string
+	json.Unmarshal(body, &created)
+
+	// Act: drop the age column.
+	if res, _ := env.do("DELETE", "/api/tables/P/columns/age", tok, nil); res.StatusCode != 200 {
+		t.Fatalf("delete column: %d", res.StatusCode)
+	}
+
+	// Assert: the row keeps its id and loses the value; unknown and last
+	// columns are refused.
+	_, body = env.do("GET", "/api/tables/P/rows/"+created["id"], tok, nil)
+	var row map[string]string
+	json.Unmarshal(body, &row)
+	if row["name"] != "amy" {
+		t.Fatalf("row lost: %s", body)
+	}
+	if _, ok := row["age"]; ok {
+		t.Fatalf("age should be gone: %s", body)
+	}
+	if res, _ := env.do("DELETE", "/api/tables/P/columns/age", tok, nil); res.StatusCode != 404 {
+		t.Fatalf("unknown column should be 404, got %d", res.StatusCode)
+	}
+	if res, _ := env.do("DELETE", "/api/tables/P/columns/name", tok, nil); res.StatusCode != 400 {
+		t.Fatalf("last column should be 400, got %d", res.StatusCode)
+	}
+}

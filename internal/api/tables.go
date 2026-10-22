@@ -169,6 +169,24 @@ func (sv *Server) renameColumn(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"columns": cols})
 }
 
+func (sv *Server) deleteColumn(w http.ResponseWriter, r *http.Request) {
+	table := chi.URLParam(r, "t")
+	if !sv.checkTable(w, table) {
+		return
+	}
+	col := chi.URLParam(r, "col")
+	if err := sv.store.DeleteColumn(table, col); mapStoreErr(w, err) {
+		return
+	}
+	sv.auditEvent(r, "delete_column", table, "", map[string]string{"column": col})
+	cols, err := sv.store.GetColumnsMeta(table)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"columns": cols})
+}
+
 func (sv *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	table := chi.URLParam(r, "t")
 	if !sv.checkTable(w, table) {
