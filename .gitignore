@@ -19,3 +19,6 @@ ui/node_modules/
 # fly.io config: generate per-app from fly.toml.example
 /fly.toml
 .zcodeignore
+
+# local stress-test rig (xlsx, containers, load-test artifacts)
+/stress-run/
