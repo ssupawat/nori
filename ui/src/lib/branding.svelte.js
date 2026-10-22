@@ -40,8 +40,7 @@ export async function loadBranding() {
   }
 }
 
-// In dark mode a near-black accent (the default) would vanish into the
-// background, so it flips to near-white; any other brand color is kept.
+// In dark mode a near-black accent is replaced by near-white.
 const darkQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
 
 function applyBrandColor() {

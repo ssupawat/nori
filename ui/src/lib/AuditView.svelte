@@ -109,7 +109,6 @@
   <!-- two layers: the static frame insets the scroll window, so rows sliced
        while scrolling never touch the card border directly -->
   <div class="rounded-lg border border-zinc-200 bg-white p-2">
-    <!-- max-h, not h: an empty trail is not a tall empty frame -->
     <div class="max-h-[544px] overflow-y-auto">
       <ul class="divide-y divide-zinc-200">
       {#each entries as e, i (i)}

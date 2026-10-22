@@ -64,7 +64,7 @@
   let dateEdit = $state(null);
   let dateInputEl = $state(null);
 
-  // the host pauses background refreshes while a cell editor is open
+  // reports whether a cell editor is open
   $effect(() => {
     oneditstate?.(!!editing || !!dateEdit);
   });
@@ -77,8 +77,7 @@
     selectedCell = { id: rows[rowIdx]?.id, col: columns[colIdx] };
   }
 
-  // initial: text typed on a selected cell replaces its value (spreadsheet
-  // behaviour); undefined keeps the current value for editing
+  // initial: typed text that replaces the cell value; undefined keeps it
   function startEdit(row, colIdx, initial) {
     editing = { id: row.id, col: columns[colIdx], initial };
   }
@@ -172,8 +171,8 @@
     }
   });
 
-  // commits once, when the editor closes (blur, Enter, Tab) - and only if
-  // the value really changed: an untouched editor writes nothing
+  // commits once, when the editor closes (blur, Enter, Tab), and only if
+  // the value changed
   function dateCommit(row, col, e) {
     if (dateCancelled) {
       dateCancelled = false;
@@ -208,8 +207,7 @@
 
   // When a new row is created, scroll it into view and start editing its
   // first cell right away (explicit intent, so still safe from accidents).
-  // onfocused tells the host to forget the id, so later reloads (sort,
-  // paging) don't jump back to it.
+  // onfocused tells the host the row was handled.
   let highlightId = $state(null);
   $effect(() => {
     if (!focusRowId || rows.length === 0) return;
@@ -271,9 +269,8 @@
 
 <!-- flex-1 min-h-0: fill the remaining page height exactly (pagination sits
      right below), and scroll internally instead of leaving dead space below.
-     The wrapper carries the right-edge fade that says more columns are
-     hidden. Number headers draw their menu button first (flex-row-reverse),
-     so the label ends where the right-aligned numbers end. -->
+     The wrapper holds the right-edge fade; number headers use
+     flex-row-reverse (menu button first). -->
 <div class="relative hidden min-h-0 flex-1 md:flex">
 <div
   class="min-h-0 flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm"
@@ -332,8 +329,6 @@
                   <ChevronsUpDown class="size-3 text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100" />
                 {/if}
               </button>
-              <!-- a real button, faintly visible at rest so it is findable
-                   without hover (keyboard, touch laptops) -->
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger
                   class="rounded p-1 text-zinc-500 opacity-40 transition-opacity group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:opacity-100 data-[state=open]:opacity-100"
@@ -390,8 +385,8 @@
             </td>
           {/if}
           {#if canEdit}
-            <!-- row number doubles as the row menu: right-click, or the
-                 ⋯ button that replaces the number on hover/focus -->
+            <!-- row number doubles as the row menu: right-click, or the ⋯ button
+                 shown on hover/focus -->
             <ContextMenu.Root>
               <ContextMenu.Trigger>
                 {#snippet child({ props })}

@@ -34,8 +34,8 @@
   let usersLoaded = $state(false);
   let keysLoaded = $state(false);
 
-  // one-time secrets (new password / new key): closing before they were
-  // copied or downloaded asks once, since they can never be shown again
+  // one-time secrets (new password / new key): closing before a copy or
+  // download asks once
   let secretSaved = $state(false);
   let secretWarn = $state(false);
 
@@ -114,7 +114,7 @@
     passOpen = true;
   }
 
-  // throws on failure so the dialog stays open with the error inline
+  // throws on failure
   async function setPassword(v) {
     await api(`/api/users/${encodeURIComponent(passTarget)}`, {
       method: "PATCH",
@@ -123,7 +123,6 @@
     showToast(`Password changed for ${passTarget} - their sessions were signed out`);
   }
 
-  // role change: applies to the user's live sessions right away
   let roleOpen = $state(false);
   let roleTarget = $state(null);
   let roleValue = $state("viewer");
@@ -260,8 +259,6 @@
     {/if}
   </div>
 
-<!-- items-start: the user list is as tall as its users, not stretched to
-     the Roles column (one user used to sit in a big empty box) -->
 <div class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start">
   <div class="overflow-hidden rounded-lg border border-zinc-200 bg-white lg:col-span-2">
     <ul class="divide-y divide-zinc-200">
@@ -319,9 +316,7 @@
     </ul>
   </div>
 
-  <!-- roles reference: helps pick the right role when adding someone. A
-       card beside the users on wide screens; folded on phones, where four
-       cards stood between the users and the API keys -->
+  <!-- roles reference: a card on wide screens, a disclosure on phones -->
   {#snippet roleList()}
     {#each [["admin", "Full access: tables, columns, rows, import/export, users, API keys, branding."], ["editor", "Create, edit and delete rows in every table."], ["viewer", "Read-only: browse tables and rows, export."], ["builder", "Builds against the API without seeing data: table names, columns and docs only, never rows."]] as [r, text] (r)}
       <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
@@ -455,7 +450,6 @@
 </Dialog.Root>
 
 {#snippet secretBlock(secret)}
-  <!-- select-all: one click selects the whole secret if copying fails -->
   <pre class="mt-3 rounded-lg bg-zinc-50 p-3 font-mono text-xs break-all whitespace-pre-wrap select-all">{secret}</pre>
   {#if secretWarn && !secretSaved}
     <p class="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800" role="alert">

@@ -55,15 +55,13 @@
     sheetOpen = true;
   }
 
-  // the host pauses background refreshes while the sheet is open
+  // reports whether the sheet is open
   $effect(() => {
     oneditstate?.(sheetOpen);
   });
 
-  // Fields save on change (fired on blur). Closing the sheet unmounts the
-  // focused field before it blurs, so blur it first: the change commits.
-  // onOpenChange only fires for user closes (Esc, overlay, ×); the Done
-  // button closes in code, so both paths meet here.
+  // Closing blurs the focused field first; its change handler saves it.
+  // Both close paths end here: onOpenChange (Esc, overlay, ×) and Done.
   function closeSheet() {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     sheetOpen = false;
@@ -78,7 +76,7 @@
 
   function sheetClosed() {
     const row = sheetRow;
-    // let the blur's change handler run before the host looks at the row
+    // runs after the blur's change handler
     setTimeout(() => onsheetclosed?.(row));
   }
 
@@ -107,7 +105,6 @@
     highlightId = focusRowId;
     const id = focusRowId;
     onfocused?.();
-    // a new row has nothing to show yet: open it for editing straight away
     if (canEdit) openSheet(row);
     setTimeout(() => {
       if (highlightId === id) highlightId = null;

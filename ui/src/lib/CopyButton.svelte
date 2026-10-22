@@ -4,9 +4,7 @@
   import { copyText } from "./clipboard.js";
   import { showToast } from "./toast.svelte.js";
 
-  // text: the string to copy, or an async function returning it (fetched
-  // on click). The button itself confirms the copy - the user is looking at
-  // it - and a failure says what to do instead of failing silently.
+  // text: the string to copy, or an async function returning it (called on click)
   let {
     text,
     label = "",

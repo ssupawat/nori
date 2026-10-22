@@ -9,8 +9,7 @@
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
 
-  // after an expired session the username is kept, so only the password
-  // needs typing and the dashboard reopens where it was
+  // prefilled after an expired session
   let username = $state(auth.username);
   let reveal = $state(false);
   let logoBroken = $state(false);

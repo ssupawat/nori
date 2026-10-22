@@ -33,9 +33,8 @@
   import SettingsView from "./lib/SettingsView.svelte";
   import { applyFavicon } from "./lib/favicon.js";
 
-  // The view and table live in the URL hash (#/tables/orders, #/audit), so
-  // Back/Forward work and a table can be bookmarked or shared; localStorage
-  // still restores the last view when the URL has none.
+  // The view and table are kept in the URL hash (#/tables/orders, #/audit);
+  // localStorage restores the last view when the hash is empty.
   const VIEWS = ["dashboard", "tables", "api", "access", "audit", "settings"];
 
   function parseHash() {
@@ -89,10 +88,7 @@
     applyFavicon(branding);
   });
 
-  // Reset the active view only when a different person signs in, so a
-  // restricted account never lands on the previous admin's view - while the
-  // same admin signing back in after an expired session (or a refresh)
-  // keeps their place.
+  // Reset the view to the dashboard when a different user signs in.
   let lastUser = localStorage.getItem("nori-last-user") ?? "";
   let prevToken = auth.token;
   $effect(() => {
@@ -100,7 +96,7 @@
     prevToken = auth.token;
     drawerOpen = false;
     if (!auth.token) return;
-    // first sign-in on this browser keeps the view too (a shared link)
+    // a first sign-in on this browser keeps the current view
     if (lastUser && auth.username !== lastUser) view = "dashboard";
     lastUser = auth.username;
     localStorage.setItem("nori-last-user", lastUser);
@@ -377,8 +373,7 @@
         </div>
       </main>
 
-      <!-- Mobile bottom nav: fixed four tabs - one Tables tab (the table
-           picker sits in the Tables view) and More for everything else -->
+      <!-- Mobile bottom nav: Dashboard, Tables, API, More -->
       <nav class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-zinc-200 bg-white/90 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-sm md:hidden" aria-label="Main">
         {#each [{ v: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { v: "tables", label: "Tables", icon: Table2 }, { v: "api", label: "API", icon: Braces }] as t (t.v)}
           <button class={mobileTabCls(view === t.v)} aria-current={view === t.v ? "page" : undefined} onclick={() => goto(t.v)}>

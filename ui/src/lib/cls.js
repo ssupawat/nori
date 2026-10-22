@@ -1,10 +1,9 @@
 // Shared class strings for form controls, so every select and input in the
 // dashboard looks and behaves the same (border, padding, item hover).
-// Focus: outlines are replaced by a visible ring, never removed outright.
+// Focus shows a ring.
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus:border-zinc-500";
 
-// no width here: callers add w-full / w-44 (a built-in w-full would win
-// over theirs, since it sorts later in the generated CSS)
+// no width: callers add one (w-full, w-44)
 export const selectTrigger =
   "flex items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 " + focusRing;
 

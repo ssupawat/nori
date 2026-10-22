@@ -18,8 +18,7 @@
   }}
 >
   <AlertDialog.Portal>
-    <!-- above other dialogs: a confirm can be asked from inside one (e.g.
-         "Convert values?" over the column dialog) -->
+    <!-- stacked above other dialogs -->
     <AlertDialog.Overlay class={dialogOverlay.replace("z-40", "z-[55]")} />
     <AlertDialog.Content class="{dialogContent.replace('z-50', 'z-[56]')} w-[26rem] max-w-[calc(100vw-2rem)]">
       <AlertDialog.Title class="flex items-center gap-2 font-semibold">

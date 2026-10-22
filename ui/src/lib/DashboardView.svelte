@@ -61,7 +61,7 @@
   let refreshing = $state(false);
   let loadedAt = $state(null);
 
-  // quiet: the 60s timer refreshes without toasting the same error again
+  // quiet: no error toasts
   async function refresh(quiet = false) {
     refreshing = true;
     const fail = (err) => {
@@ -76,7 +76,7 @@
     refreshing = false;
   }
 
-  // numbers (requests, backup age) stay current while the page is open
+  // refresh every 60s while the page is visible
   $effect(() => {
     refresh();
     const timer = setInterval(() => {
@@ -104,7 +104,6 @@
     {#if status}
       <!-- server metadata as a status line, not a strip: the full paths
            stay in GET /api/status, this keeps the glanceable tail -->
-      <!-- each value carries its label: "dev · 3s · 32 KB" alone was cryptic -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500" title="data in {status.dataDir}{status.diskFreeBytes > 0 ? `, ${bytes(status.diskFreeBytes)} disk free` : ''}">
         <span>version <span class="font-medium text-zinc-700">{status.version}</span></span>
         <span>uptime <span class="font-medium text-zinc-700">{duration(status.uptimeSeconds)}</span></span>
@@ -156,8 +155,7 @@
       </div>
     </div>
   {:else if usage}
-    <!-- KPI tiles: uniform, one glance each; two columns on phones so the
-         chart isn't pushed below the fold -->
+    <!-- KPI tiles: two columns on phones, three from sm -->
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
     <div class={tileCls}>
       <span class="text-xs text-zinc-500">Requests, last 24h</span>
@@ -180,8 +178,6 @@
   </div>
 
   <div class="flex flex-col gap-4 lg:grid lg:grid-cols-3">
-    <!-- the chart fills its card (no empty band below), empty hours are a
-         faint baseline instead of black stubs, bars a softer brand tint -->
     <div class="{sectionCls} flex flex-col lg:col-span-2">
       <div class="mb-3 flex items-baseline justify-between gap-2">
         <span class="text-sm font-semibold">Requests per hour</span>
@@ -224,7 +220,7 @@
               <span class="min-w-0 truncate font-medium">{t.name}</span>
               <span class="shrink-0 tabular-nums text-zinc-500">{t.rows.toLocaleString()} rows · {pct < 1 ? "<1%" : `${Math.round(pct)}%`}</span>
             </div>
-            <!-- below 1% there is no fill: a 1px sliver read as a glitch -->
+            <!-- no fill below 1% -->
             <div class="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100" title="{t.rows.toLocaleString()} / {usage.maxRows.toLocaleString()} rows">
               {#if pct >= 1}
                 <div class="h-2 rounded-full {pct >= 75 ? 'bg-amber-500' : 'bg-brand'}" style="width: {pct}%"></div>

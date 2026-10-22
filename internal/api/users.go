@@ -119,9 +119,8 @@ func (sv *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// updateUser changes a user's password and/or role. Revoking that user's
-// sessions is part of a password change, so a rotated credential stops
-// working everywhere; a role change applies to live sessions at once.
+// updateUser changes a user's password and/or role. A password change
+// also revokes that user's sessions.
 func (sv *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body struct {

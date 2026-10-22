@@ -3,7 +3,7 @@ function load() {
     token: localStorage.getItem("token") || "",
     username: localStorage.getItem("username") || "",
     role: localStorage.getItem("role") || "",
-    // why the last session ended: "expired" shows a notice on the login page
+    // how the last session ended: "expired" or ""
     ended: "",
   };
 }
@@ -20,8 +20,7 @@ export function setSession({ token, username, role }) {
   localStorage.setItem("role", role);
 }
 
-// reason "expired" keeps the username so the login form is prefilled and
-// the same user lands back where they were
+// reason "expired" keeps the username
 export function clearSession(reason = "") {
   auth.token = "";
   auth.role = "";

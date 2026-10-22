@@ -35,8 +35,7 @@ export function duration(s) {
 }
 
 // datetime cells are stored as RFC3339 UTC; editors run in the browser's
-// local zone and commit back to UTC. Seconds are kept (inputs use step=1),
-// so opening an editor and leaving it never rounds a stored value.
+// local zone and commit back to UTC. Seconds are kept (inputs use step=1).
 export function utcToLocalInput(value) {
   if (!value) return "";
   const d = new Date(value);
@@ -62,8 +61,7 @@ export function dtDisplay(value) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}${secs}`;
 }
 
-// true when two stored datetime strings name the same instant, so an
-// unchanged editor never writes "...00.000Z" over "...00Z"
+// true when two stored datetime strings name the same instant
 export function sameInstant(a, b) {
   if ((a ?? "") === (b ?? "")) return true;
   const x = new Date(a), y = new Date(b);

@@ -4,10 +4,8 @@ html {
   color-scheme: light;
 }
 
-/* Dark mode follows the OS. Rather than a dark: variant on every class,
-   the zinc scale is remapped (light <-> dark) and white surfaces turn dark;
-   the few places that need literal white use text-[#fff]. The default
-   near-black brand flips to near-white in branding.svelte.js. */
+/* Dark mode follows the OS: the zinc scale and white surfaces are remapped;
+   text-[#fff] marks literal white. */
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
@@ -104,7 +102,7 @@ button {
 @keyframes anim-slide-left-out { to { transform: translateX(-100%); } }
 @keyframes anim-slide-up-out { to { transform: translateY(100%); } }
 
-/* visible keyboard focus everywhere (mouse clicks stay ring-free) */
+/* keyboard focus ring */
 :where(button, a, [role="button"], [role="menuitem"], [role="option"], summary):focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;

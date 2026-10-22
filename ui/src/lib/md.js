@@ -1,6 +1,5 @@
 // Minimal markdown for the llms.txt handbook: # / ## headings, "- " lists,
-// paragraphs and `code` spans. Input is escaped first, so the result is
-// safe to {@html}.
+// paragraphs and `code` spans. Input is escaped first.
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code class="rounded bg-zinc-100 px-1 font-mono text-[0.85em]">$1</code>');
 

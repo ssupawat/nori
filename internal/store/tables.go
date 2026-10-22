@@ -397,9 +397,8 @@ func (s *Store) RenameColumn(table, oldCol, newCol string) error {
 	return s.stageAndSwap(table, renamed, docs, "")
 }
 
-// DeleteColumn drops a column and its values from every row, rewriting the
-// table in a single batch like RenameColumn. Row ids are preserved. The
-// last column cannot be dropped: a table always has at least one.
+// DeleteColumn drops a column and its values from every row. Row ids are
+// preserved; the last column cannot be dropped.
 func (s *Store) DeleteColumn(table, column string) error {
 	s.tablesMu.Lock()
 	defer s.tablesMu.Unlock()
