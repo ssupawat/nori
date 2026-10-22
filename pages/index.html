@@ -302,8 +302,8 @@ ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 # then import an .xlsx - every sheet becomes a table</span></pre>
       <p class="friction">Prefer building yourself? <b>go build</b> works too, and a Dockerfile is included.</p>
       <ul class="facts">
-        <li><b>~0.3ms</b> cached reads</li>
-        <li><b>~200-250</b> writes/s sustained</li>
+        <li><b>~125ms</b> to search a full 200,000-row table</li>
+        <li><b>~110s</b> to import it, <b>&lt;8s</b> to export it</li>
         <li><b>fsync</b> on every write</li>
         <li><b>200,000</b> rows per table, stated up front</li>
       </ul>
