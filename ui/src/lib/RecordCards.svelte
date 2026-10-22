@@ -8,7 +8,7 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import X from "@lucide/svelte/icons/x";
-  import { utcToLocalInput, localInputToUtc } from "./fmt.js";
+  import { utcToLocalInput, localInputToUtc, sameInstant, dtDisplay } from "./fmt.js";
   import { dialogOverlay } from "./cls.js";
 
   let {
@@ -17,6 +17,8 @@
     types = [],
     invalid = null,
     focusRowId = null,
+    loading = false,
+    saveState = "",
     canEdit,
     renameable = false,
     selected,
@@ -25,6 +27,9 @@
     onduplicate,
     ondelete,
     onrenamecol,
+    onfocused,
+    oneditstate,
+    onsheetclosed,
     emptyText = "No rows yet 🌱",
   } = $props();
 
@@ -52,9 +57,44 @@
     sheetOpen = true;
   }
 
-  function save(row, col, e) {
-    const value = e.currentTarget.value;
-    if (value !== (row[col] ?? "")) onsave(row, col, value);
+  // the host pauses background refreshes while the sheet is open
+  $effect(() => {
+    oneditstate?.(sheetOpen);
+  });
+
+  // Fields save on change (fired on blur). Closing the sheet unmounts the
+  // focused field before it blurs, so blur it first: the change commits.
+  // onOpenChange only fires for user closes (Esc, overlay, ×); the Done
+  // button closes in code, so both paths meet here.
+  function closeSheet() {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    sheetOpen = false;
+    sheetClosed();
+  }
+
+  function onSheetOpenChange(o) {
+    if (o) return;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    sheetClosed();
+  }
+
+  function sheetClosed() {
+    const row = sheetRow;
+    // let the blur's change handler run before the host looks at the row
+    setTimeout(() => onsheetclosed?.(row));
+  }
+
+  function save(row, col, value) {
+    if (value === (row[col] ?? "")) return;
+    row[col] = value;
+    onsave(row, col, value);
+  }
+
+  function saveDatetime(row, col, local) {
+    const utc = localInputToUtc(local);
+    if (sameInstant(utc, row[col])) return;
+    row[col] = utc;
+    onsave(row, col, utc);
   }
 
   // mirror the grid: after add-row, scroll the new card into view and flash it
@@ -64,9 +104,13 @@
     const row = rows.find((r) => r.id === focusRowId);
     if (!row) return;
     const el = document.querySelector(`[data-row-id="${focusRowId}"]`);
-    el?.scrollIntoView({ block: "center" });
+    if (!el || el.offsetParent === null) return; // cards hidden (desktop)
+    el.scrollIntoView({ block: "center" });
     highlightId = focusRowId;
     const id = focusRowId;
+    onfocused?.();
+    // a new row has nothing to show yet: open it for editing straight away
+    if (canEdit) openSheet(row);
     setTimeout(() => {
       if (highlightId === id) highlightId = null;
     }, 1800);
@@ -75,8 +119,12 @@
 
 {#if rows.length === 0}
   <div class="rounded-lg border border-zinc-200 bg-white px-3 py-10 text-center text-zinc-500 shadow-sm md:hidden">
-    <Inbox class="mx-auto mb-1 size-7 text-zinc-300" />
-    {emptyText}
+    {#if loading}
+      Loading rows…
+    {:else}
+      <Inbox class="mx-auto mb-1 size-7 text-zinc-300" />
+      {emptyText}
+    {/if}
   </div>
 {:else}  <div class="flex flex-col gap-2 md:hidden">
     {#each rows as row, i (row.id)}
@@ -91,6 +139,7 @@
         {#if canEdit}
           <Checkbox.Root
             class={checkboxCls}
+            aria-label="Select {titleOf(row)}"
             checked={selected.has(row.id)}
             onclick={(e) => e.stopPropagation()}
             onCheckedChange={(c) => onselect(row.id, c === true)}
@@ -111,13 +160,13 @@
             {@const tp = types[columns.indexOf(col)]}
             {#if v}
               <div class="mt-0.5 truncate text-xs text-zinc-500 {tp === 'number' ? 'tabular-nums' : ''}">
-                <span class="text-zinc-400">{col}</span> {v}
+                <span class="text-zinc-500">{col}</span> {tp === "datetime" ? dtDisplay(v) : v}
               </div>
             {/if}
           {/each}
         </div>
         <div class="flex shrink-0 items-center gap-1 self-center text-zinc-300">
-          <span class="font-mono text-xs text-zinc-400 tabular-nums">#{i + 1}</span>
+          <span class="font-mono text-xs text-zinc-500 tabular-nums">#{i + 1}</span>
           <ChevronRight class="size-4" />
         </div>
       </div>
@@ -125,7 +174,7 @@
   </div>
 {/if}
 
-<Dialog.Root bind:open={sheetOpen}>
+<Dialog.Root bind:open={sheetOpen} onOpenChange={onSheetOpenChange}>
   <Dialog.Portal>
     <Dialog.Overlay class="anim-fade {dialogOverlay}" />
     <Dialog.Content
@@ -136,6 +185,11 @@
           <Dialog.Title class="min-w-0 truncate text-base font-bold text-zinc-900">
             {titleOf(sheetRow)}
           </Dialog.Title>
+          {#if saveState}
+            <span class="ml-auto shrink-0 self-center text-xs text-zinc-500" aria-live="polite">
+              {saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "✓ Saved"}
+            </span>
+          {/if}
           <Dialog.Close
             class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
             title="Close"
@@ -149,8 +203,9 @@
                 {col}
                 {#if renameable}
                   <button
-                    class="text-zinc-400 hover:text-zinc-900"
-                    title="Rename column"
+                    type="button"
+                    class="rounded p-1 text-zinc-500 hover:text-zinc-900"
+                    aria-label="Rename column {col}"
                     onclick={() => {
                       sheetOpen = false;
                       onrenamecol?.(col);
@@ -163,15 +218,16 @@
                   type="date"
                   class={inputCls(bad)}
                   value={sheetRow[col] ?? ""}
-                  onchange={(e) => save(sheetRow, col, e)}
+                  onchange={(e) => save(sheetRow, col, e.currentTarget.value)}
                   readonly={!canEdit}
                 />
               {:else if types[j] === "datetime"}
                 <input
                   type="datetime-local"
+                  step="1"
                   class={inputCls(bad)}
                   value={utcToLocalInput(sheetRow[col])}
-                  onchange={(e) => save(sheetRow, col, localInputToUtc(e.currentTarget.value))}
+                  onchange={(e) => saveDatetime(sheetRow, col, e.currentTarget.value)}
                   readonly={!canEdit}
                 />
               {:else}
@@ -179,7 +235,7 @@
                   class={inputCls(bad)}
                   value={sheetRow[col] ?? ""}
                   inputmode={types[j] === "number" ? "decimal" : undefined}
-                  onchange={(e) => save(sheetRow, col, e)}
+                  onchange={(e) => save(sheetRow, col, e.currentTarget.value)}
                   readonly={!canEdit}
                 />
               {/if}
@@ -187,7 +243,7 @@
           {/each}
         </div>
         {#if canEdit}
-          <div class="mt-4 flex items-center gap-2 border-t border-zinc-200 pt-3">
+          <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3">
             <button
               class="flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
               onclick={() => {
@@ -202,7 +258,13 @@
                 ondelete(sheetRow);
               }}
             ><Trash2 class="size-3.5" /> Delete</button>
+            <button
+              class="bg-brand w-full rounded-lg px-3 py-2 text-sm font-medium text-brand-on"
+              onclick={closeSheet}
+            >Done</button>
           </div>
+        {:else}
+          <button class="mt-4 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm" onclick={closeSheet}>Close</button>
         {/if}
       {/if}
     </Dialog.Content>

@@ -66,7 +66,7 @@
       class="{dialogContent} max-h-[85vh] w-96 max-w-[calc(100vw-2rem)] overflow-y-auto"
     >
       <Dialog.Title class="mb-1 font-semibold">New table</Dialog.Title>
-      <Dialog.Description class="mb-4 text-sm text-zinc-400">
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
         Define the columns. You can add more later.
       </Dialog.Description>
       <form onsubmit={submit} class="flex flex-col gap-3">
@@ -85,12 +85,13 @@
                 class="{inputCls} flex-1"
                 type="text"
                 placeholder="Column {i + 1}"
+                aria-label="Column {i + 1} name"
                 bind:value={col.name}
               />
               <Select.Root type="single" bind:value={col.type}>
-                <Select.Trigger class="{selectTriggerSm}">
+                <Select.Trigger class="{selectTriggerSm}" aria-label="Column {i + 1} type">
                   <span class="truncate">{col.type}</span>
-                  <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+                  <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
                 </Select.Trigger>
                 <Select.Portal>
                   <Select.Content class={selectContent}>
@@ -105,8 +106,9 @@
               </Select.Root>
               <button
                 type="button"
-                class="rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30"
+                class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-30"
                 title="Remove column"
+                aria-label="Remove column {i + 1}"
                 disabled={cols.length === 1}
                 onclick={() => removeCol(i)}
               >
@@ -127,7 +129,7 @@
           <button
             class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"
             disabled={busy}
-          >Create</button>
+          >{busy ? "Creating…" : "Create table"}</button>
         </div>
       </form>
     </Dialog.Content>

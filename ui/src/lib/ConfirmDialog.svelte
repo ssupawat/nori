@@ -2,7 +2,13 @@
   import { AlertDialog } from "bits-ui";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { confirmState, answerConfirm } from "./confirm.svelte.js";
-  import { dialogOverlay, dialogContent } from "./cls.js";
+  import { dialogOverlay, dialogContent, inputCls, btnPrimary, btnSecondary, btnDanger } from "./cls.js";
+
+  let typed = $state("");
+  $effect(() => {
+    if (confirmState.open) typed = "";
+  });
+  const blocked = $derived(confirmState.requireText !== "" && typed !== confirmState.requireText);
 </script>
 
 <AlertDialog.Root
@@ -12,22 +18,32 @@
   }}
 >
   <AlertDialog.Portal>
-    <AlertDialog.Overlay class={dialogOverlay} />
-    <AlertDialog.Content class={dialogContent}>
+    <!-- above other dialogs: a confirm can be asked from inside one (e.g.
+         "Convert values?" over the column dialog) -->
+    <AlertDialog.Overlay class={dialogOverlay.replace("z-40", "z-[55]")} />
+    <AlertDialog.Content class="{dialogContent.replace('z-50', 'z-[56]')} w-[26rem] max-w-[calc(100vw-2rem)]">
       <AlertDialog.Title class="flex items-center gap-2 font-semibold">
-        <TriangleAlert class="size-4" />
+        <TriangleAlert class="size-4 {confirmState.danger ? 'text-red-600' : ''}" />
         {confirmState.title}
       </AlertDialog.Title>
-      <AlertDialog.Description class="mt-1 mb-4 text-sm text-zinc-400">
+      <AlertDialog.Description class="mt-1 mb-4 text-sm text-zinc-500">
         {confirmState.message}
       </AlertDialog.Description>
-      <div class="flex justify-end gap-2">
-        <AlertDialog.Cancel
-          class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-        >Cancel</AlertDialog.Cancel>
+      {#if confirmState.requireText}
+        <label class="mb-4 block text-xs text-zinc-600">
+          Type <span class="font-mono font-semibold text-zinc-900">{confirmState.requireText}</span> to confirm
+          <input class="{inputCls} mt-1" bind:value={typed} autocomplete="off" />
+        </label>
+      {/if}
+      <div class="flex flex-wrap justify-end gap-2">
+        <AlertDialog.Cancel class={btnSecondary}>Cancel</AlertDialog.Cancel>
+        {#if confirmState.altLabel}
+          <button class={btnSecondary} onclick={() => answerConfirm("alt")}>{confirmState.altLabel}</button>
+        {/if}
         <AlertDialog.Action
-          class="bg-brand rounded-lg px-3 py-1.5 text-sm text-brand-on"
-          onclick={() => answerConfirm(true)}
+          class={confirmState.danger ? btnDanger : btnPrimary}
+          disabled={blocked}
+          onclick={() => !blocked && answerConfirm(true)}
         >{confirmState.confirmLabel}</AlertDialog.Action>
       </div>
     </AlertDialog.Content>

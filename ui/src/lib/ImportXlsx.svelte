@@ -1,7 +1,8 @@
 <script>
   import { Dialog } from "bits-ui";
   import { api } from "./api.js";
-  import { dialogOverlay, dialogContent } from "./cls.js";
+  import { dialogOverlay, dialogContent, btnPrimary, btnSecondary } from "./cls.js";
+  import { askConfirm } from "./confirm.svelte.js";
   import { tables, refreshTables, openTable } from "./tables.svelte.js";
   import { showToast } from "./toast.svelte.js";
 
@@ -10,7 +11,9 @@
 
   let fileInput;
   let file = $state(null);
-  let mode = $state("replace");
+  // append is the safe default: replace drops tables and every edit made
+  // since the last import
+  let mode = $state("append");
   let open = $state(false);
   let busy = $state(false);
 
@@ -26,15 +29,33 @@
     await run();
   }
 
+  // a file from the picker or dropped onto the dashboard
+  export function choose(f) {
+    if (!/\.xlsx$/i.test(f.name)) {
+      showToast(`${f.name} is not an .xlsx file`, "error");
+      return;
+    }
+    file = f;
+    mode = "append";
+    open = true;
+  }
+
   function chosen(e) {
-    file = e.target.files[0] ?? null;
+    const f = e.target.files[0] ?? null;
     e.target.value = "";
-    mode = "replace";
-    if (file) open = true;
+    if (f) choose(f);
   }
 
   async function submit(e) {
     e.preventDefault();
+    if (mode === "replace" && tables.list.length > 0) {
+      const ok = await askConfirm(
+        "Tables named like a sheet in the file are dropped and rebuilt from it. Rows added or edited in the dashboard since the last import are lost.",
+        "Replace tables?",
+        "Replace"
+      );
+      if (!ok) return;
+    }
     await run();
   }
 
@@ -78,39 +99,34 @@
       class="{dialogContent} max-h-[85vh] w-96 max-w-[calc(100vw-2rem)] overflow-y-auto"
     >
       <Dialog.Title class="mb-1 truncate font-semibold">Import {file?.name}</Dialog.Title>
-      <Dialog.Description class="mb-4 text-sm text-zinc-400">
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
         Every sheet in the file becomes a table.
       </Dialog.Description>
       <form onsubmit={submit} class="flex flex-col gap-2">
         <!-- replace vs append only differs when tables already exist -->
         {#if tables.list.length > 0}
         <label class={optCls}>
-          <input type="radio" bind:group={mode} value="replace" class="mt-1 accent-zinc-900" />
-          <span>
-            <span class="block font-medium">Replace</span>
-            <span class="block text-xs text-zinc-500">
-              Tables named like a sheet are dropped and rebuilt from the file.
-            </span>
-          </span>
-        </label>
-        <label class={optCls}>
           <input type="radio" bind:group={mode} value="append" class="mt-1 accent-zinc-900" />
           <span>
             <span class="block font-medium">Append</span>
             <span class="block text-xs text-zinc-500">
-              Rows are added to tables named like a sheet; new columns are merged in.
+              Rows are added to tables named like a sheet; new columns are merged in. Other sheets become new tables.
+            </span>
+          </span>
+        </label>
+        <label class={optCls}>
+          <input type="radio" bind:group={mode} value="replace" class="mt-1 accent-zinc-900" />
+          <span>
+            <span class="block font-medium">Replace</span>
+            <span class="block text-xs text-zinc-500">
+              Tables named like a sheet are dropped and rebuilt from the file - edits made here are lost.
             </span>
           </span>
         </label>
         {/if}
         <div class="mt-1 flex justify-end gap-2">
-          <Dialog.Close
-            class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-          >Cancel</Dialog.Close>
-          <button
-            class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"
-            disabled={busy}
-          >Import</button>
+          <Dialog.Close class={btnSecondary} disabled={busy}>Cancel</Dialog.Close>
+          <button class={btnPrimary} disabled={busy}>{busy ? "Importing…" : "Import"}</button>
         </div>
       </form>
     </Dialog.Content>

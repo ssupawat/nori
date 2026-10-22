@@ -71,3 +71,13 @@ button {
 @keyframes anim-pop-out { to { opacity: 0; transform: translate(-50%, -50%) scale(0.96); } }
 @keyframes anim-slide-left-out { to { transform: translateX(-100%); } }
 @keyframes anim-slide-up-out { to { transform: translateY(100%); } }
+
+/* visible keyboard focus everywhere (mouse clicks stay ring-free) */
+:where(button, a, [role="button"], [role="menuitem"], [role="option"], summary):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+td[tabindex]:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
