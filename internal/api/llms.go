@@ -31,7 +31,7 @@ func (sv *Server) LLMsTxt(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("## Endpoint reference\n\nFull request/response shapes, status codes and examples: GET /openapi.json (OpenAPI 3.1, same bearer auth).\n\n")
 	b.WriteString("## Response grammar\n\nOne grammar everywhere: missing resource → 404, invalid input → 400, existing name on create → 409, server or storage failure → 500 (safe to retry), create → 201 with the resource, update → 200 with the updated resource, delete → {\"status\":\"ok\"}, errors → {\"error\":\"...\"}. Rows always carry every column (\"\" when empty). Writes made with an API key show as \"key:<name>\" in the audit trail.\n\n")
 	b.WriteString("## Limits\n\n")
-	fmt.Fprintf(&b, "- %d rows max and %d columns max per table; writes or imports beyond that are rejected with 400\n- import file max %d MB\n- import decompresses at most 64 MB of worksheet XML (zip-bomb guard)\n- reads are cached up to %d rows across all tables; past that, the largest cached tables fall back to slower per-request scans (same results)\n", store.MaxTableRows, store.MaxTableCols, MaxImportBytes>>20, store.MaxCachedRowsTotal)
+	fmt.Fprintf(&b, "- %d rows max and %d columns max per table; writes or imports beyond that are rejected with 400\n- import file max %d MB\n- import decompresses at most 64 MB of worksheet XML (zip-bomb guard)\n- reads are cached up to %d rows and %d MB across all tables; past either limit, the largest cached tables fall back to slower per-request scans (same results)\n", store.MaxTableRows, store.MaxTableCols, MaxImportBytes>>20, store.MaxCachedRowsTotal, store.MaxCacheBytes>>20)
 	b.WriteString("\n## Tables\n\n")
 	for _, t := range tables {
 		parts := make([]string, len(t.Columns))

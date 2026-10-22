@@ -5,6 +5,11 @@ primary_region = "sin"
 
 [build]
 
+[env]
+  # Go heap ceiling: the GC fights here before the kernel OOM-kills.
+  # Must match the machine's RAM minus OS/Fly overhead (~100MB).
+  GOMEMLIMIT = "900MiB"
+
 [mounts]
   source = "nori_data"
   destination = "/data"

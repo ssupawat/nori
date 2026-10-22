@@ -81,6 +81,30 @@ type Store struct {
 // per-table cap is MaxTableRows. A var so tests can shrink it.
 var MaxCachedRowsTotal = 400_000
 
+// MaxCacheBytes is the memory ceiling for the decoded-row cache. Rows are
+// ~4.4KB each in practice, so the row-count budget alone cannot keep the
+// cache under a fixed RAM share; eviction also runs when the estimated
+// bytes cross this line. A var so tests can shrink it.
+var MaxCacheBytes = 200 << 20
+
+// cacheRowBytes estimates one cached row's footprint: the row is stored
+// twice (original + lowercased) and string/map headers dominate.
+func cacheRowBytes(row map[string]string) int {
+	n := 96
+	for k, v := range row {
+		n += 2 * (len(k) + len(v) + 32)
+	}
+	return n
+}
+
+func cacheTableBytes(entries []rowDoc) int {
+	total := 24 * len(entries)
+	for _, e := range entries {
+		total += cacheRowBytes(e.row)
+	}
+	return total
+}
+
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
@@ -240,10 +264,11 @@ func (s *Store) rowEntries(table string) ([]rowDoc, error) {
 	}
 	sortEntries(entries, RowQuery{}, "")
 	if len(entries) <= MaxTableRows && len(entries) <= MaxCachedRowsTotal {
-		s.mu.Lock()
-		s.evictCacheFor(len(entries))
-		s.rowCache[table] = entries
-		s.mu.Unlock()
+		needed := cacheTableBytes(entries)
+		if needed <= MaxCacheBytes {
+			s.evictCache(len(entries), needed)
+			s.rowCache[table] = entries
+		}
 	}
 	return entries, nil
 }
@@ -256,26 +281,31 @@ func (s *Store) PauseRewrites() (resume func()) {
 	return s.tablesMu.RUnlock
 }
 
-// evictCacheFor makes room for a table of the given size under the global
-// cache budget, evicting whole cached tables largest-first. Caller holds
-// s.mu. Eviction never removes data - an uncached table simply re-scans.
-func (s *Store) evictCacheFor(incoming int) {
-	total := incoming
-	for _, entries := range s.rowCache {
-		total += len(entries)
+// evictCache makes room under both cache budgets (bytes and rows),
+// evicting whole cached tables largest-bytes first. Caller holds s.mu.
+// Eviction never removes data - an uncached table simply re-scans.
+func (s *Store) evictCache(neededRows, neededBytes int) {
+	totalRows, totalBytes := neededRows, neededBytes
+	sizes := make(map[string]int, len(s.rowCache))
+	for name, entries := range s.rowCache {
+		sizes[name] = cacheTableBytes(entries)
+		totalRows += len(entries)
+		totalBytes += sizes[name]
 	}
-	for total > MaxCachedRowsTotal {
-		biggest, biggestLen := "", 0
-		for name, entries := range s.rowCache {
-			if len(entries) > biggestLen {
-				biggest, biggestLen = name, len(entries)
+	for totalRows > MaxCachedRowsTotal || totalBytes > MaxCacheBytes {
+		biggest, biggestSize := "", -1
+		for name, size := range sizes {
+			if size > biggestSize {
+				biggest, biggestSize = name, size
 			}
 		}
 		if biggest == "" {
 			return
 		}
-		total -= biggestLen
+		totalRows -= len(s.rowCache[biggest])
+		totalBytes -= biggestSize
 		delete(s.rowCache, biggest)
+		delete(sizes, biggest)
 	}
 }
 
@@ -306,7 +336,7 @@ func (s *Store) patchInsert(table string, seq int64, row map[string]string) {
 		return
 	}
 	s.rowCache[table] = entries
-	s.evictCacheFor(0)
+	s.evictCache(0, 0)
 }
 
 // patchUpdate updates one cached entry in place. Caller must hold s.mu
