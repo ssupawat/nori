@@ -127,7 +127,7 @@
   }
 </script>
 
-<div class="w-full max-w-5xl">
+<div class="w-full">
   <div class="mb-3">
     <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Settings</h2>
     <p class="mt-0.5 text-sm text-zinc-500">Branding for this instance, and your account</p>
