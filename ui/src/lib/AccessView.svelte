@@ -6,13 +6,14 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Plus from "@lucide/svelte/icons/plus";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
-  import Copy from "@lucide/svelte/icons/copy";
+  import UserCog from "@lucide/svelte/icons/user-cog";
+  import CopyButton from "./CopyButton.svelte";
   import Download from "@lucide/svelte/icons/download";
   import GenArt from "./GenArt.svelte";
   import RoleBadge from "./RoleBadge.svelte";
   import PromptDialog from "./PromptDialog.svelte";
   import { api } from "./api.js";
-  import { inputCls, dialogOverlay, dialogContent } from "./cls.js";
+  import { inputCls, dialogOverlay, dialogContent, btnPrimary, btnSecondary } from "./cls.js";
   import { auth } from "./auth.svelte.js";
   import { branding } from "./branding.svelte.js";
   import { showToast } from "./toast.svelte.js";
@@ -29,12 +30,29 @@
   // generated password from the last create, shown once
   let creds = $state(null);
   let credsOpen = $state(false);
+  let usersLoaded = $state(false);
+  let keysLoaded = $state(false);
+
+  // one-time secrets (new password / new key): closing before they were
+  // copied or downloaded asks once, since they can never be shown again
+  let secretSaved = $state(false);
+  let secretWarn = $state(false);
+
+  function closeSecret(close) {
+    if (!secretSaved && !secretWarn) {
+      secretWarn = true;
+      return;
+    }
+    close();
+  }
 
   async function load() {
     try {
       users = await api("/api/users/");
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      usersLoaded = true;
     }
   }
 
@@ -54,6 +72,8 @@
       username = "";
       role = "viewer";
       addOpen = false;
+      secretSaved = false;
+      secretWarn = false;
       credsOpen = true;
       await load();
     } catch (err) {
@@ -79,13 +99,8 @@
     a.download = `${creds.username}-login.txt`;
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  async function copyPassword() {
-    try {
-      await navigator.clipboard.writeText(creds.password);
-      showToast("Copied");
-    } catch {}
+    secretSaved = true;
+    showToast(`Saved ${creds.username}-login.txt`);
   }
 
   let passOpen = $state(false);
@@ -98,22 +113,54 @@
     passOpen = true;
   }
 
+  // throws on failure so the dialog stays open with the error inline
   async function setPassword(v) {
+    await api(`/api/users/${encodeURIComponent(passTarget)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ password: v }),
+    });
+    showToast(`Password changed for ${passTarget} - their sessions were signed out`);
+  }
+
+  // role change: applies to the user's live sessions right away
+  let roleOpen = $state(false);
+  let roleTarget = $state(null);
+  let roleValue = $state("viewer");
+  let roleBusy = $state(false);
+
+  function askRole(u) {
+    roleTarget = u;
+    roleValue = u.role;
+    roleOpen = true;
+  }
+
+  async function saveRole(e) {
+    e.preventDefault();
+    if (roleValue === roleTarget.role) {
+      roleOpen = false;
+      return;
+    }
+    roleBusy = true;
     try {
-      await api(`/api/users/${encodeURIComponent(passTarget)}`, {
+      await api(`/api/users/${encodeURIComponent(roleTarget.username)}`, {
         method: "PATCH",
-        body: JSON.stringify({ password: v }),
+        body: JSON.stringify({ role: roleValue }),
       });
-      showToast(`Password changed for ${passTarget}`);
+      showToast(`${roleTarget.username} is now ${roleValue}`);
+      roleOpen = false;
+      await load();
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      roleBusy = false;
     }
   }
 
   async function deleteUser(name) {
-    if (!(await askConfirm(`User "${name}" will be removed.`, "Delete user?"))) return;
+    if (!(await askConfirm(`User "${name}" will be removed and signed out everywhere.`, "Delete user?"))) return;
     try {
       await api(`/api/users/${encodeURIComponent(name)}`, { method: "DELETE" });
+      showToast(`Deleted user ${name}`);
       await load();
     } catch (err) {
       showToast(err.message, "error");
@@ -133,6 +180,8 @@
       keys = await api("/api/keys/");
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      keysLoaded = true;
     }
   }
 
@@ -146,6 +195,8 @@
         body: JSON.stringify({ name: keyName.trim(), role: keyRole }),
       });
       newKey = { ...res };
+      secretSaved = false;
+      secretWarn = false;
       newKeyOpen = true;
       keyName = "";
       keyRole = "builder";
@@ -161,17 +212,11 @@
     if (!(await askConfirm(`"${k.name}" stops working immediately.`, "Revoke API key?", "Revoke"))) return;
     try {
       await api(`/api/keys/${encodeURIComponent(k.id)}`, { method: "DELETE" });
+      showToast(`Revoked ${k.name}`);
       await loadKeys();
     } catch (err) {
       showToast(err.message, "error");
     }
-  }
-
-  async function copyKey() {
-    try {
-      await navigator.clipboard.writeText(newKey.key);
-      showToast("Copied");
-    } catch {}
   }
 
   const roleDesc = {
@@ -235,6 +280,7 @@
               <DropdownMenu.Trigger
                 class="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
                 title="User actions"
+                aria-label="Actions for {u.username}"
               >
                 <Ellipsis class="size-4" />
               </DropdownMenu.Trigger>
@@ -243,6 +289,9 @@
                   class="z-50 min-w-40 rounded-md border border-zinc-200 bg-white py-1 shadow-md"
                   align="end"
                 >
+                  <DropdownMenu.Item class={menuItem} onSelect={() => askRole(u)}>
+                    <UserCog class="size-3.5" /> Change role
+                  </DropdownMenu.Item>
                   <DropdownMenu.Item class={menuItem} onSelect={() => askSetPassword(u.username)}>
                     <KeyRound class="size-3.5" /> Set password
                   </DropdownMenu.Item>
@@ -256,8 +305,12 @@
         </li>
       {:else}
         <li class="px-4 py-8 text-center text-sm text-zinc-500">
-          <UserRoundX class="mx-auto mb-1 size-6 text-zinc-300" />
-          No users yet 🌱
+          {#if usersLoaded}
+            <UserRoundX class="mx-auto mb-1 size-6 text-zinc-300" />
+            No users found
+          {:else}
+            Loading users…
+          {/if}
         </li>
       {/each}
     </ul>
@@ -288,39 +341,41 @@
   <div class="rounded-lg border border-zinc-200 bg-white p-4 lg:col-span-3">
     <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
       <KeyRound class="size-4" /> API keys
-      <span class="basis-full text-xs font-normal text-zinc-400 sm:basis-auto">for agents &amp; scripts - browser apps use the human login instead</span>
+      <span class="basis-full text-xs font-normal text-zinc-500 sm:basis-auto">for agents &amp; scripts - browser apps use the human login instead</span>
     </div>
     <ul class="flex flex-col divide-y divide-zinc-100">
       {#each keys as k (k.id)}
         <li class="flex items-center gap-3 py-2">
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-medium">{k.name}</span>
-            <span class="block font-mono text-xs text-zinc-400">{k.prefix}… · created {ago(k.createdAt)} · used {ago(k.lastUsedAt)}</span>
+            <span class="block font-mono text-xs text-zinc-500">{k.prefix}… · created {ago(k.createdAt)} · used {ago(k.lastUsedAt)}</span>
           </span>
           <RoleBadge role={k.role} />
           <button
             class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-red-600"
             title="Revoke key"
+            aria-label="Revoke key {k.name}"
             onclick={() => revokeKey(k)}
           ><Trash class="size-3.5" /></button>
         </li>
       {:else}
-        <li class="py-2 text-xs text-zinc-400">No keys yet - create one for each AI agent or script.</li>
+        <li class="py-2 text-xs text-zinc-500">{keysLoaded ? "No keys yet - create one for each AI agent or script." : "Loading keys…"}</li>
       {/each}
     </ul>
 
     <form onsubmit={createKey} class="mt-2 flex flex-wrap items-center gap-2">
       <input
-        class="min-w-40 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:outline-none"
+        class="{inputCls} min-w-40 flex-1"
         type="text"
         placeholder="Key name (e.g. my-ai-agent)"
+        aria-label="Key name"
         bind:value={keyName}
         required
       />
       <Select.Root type="single" bind:value={keyRole}>
-        <Select.Trigger class="{selectTrigger} w-44">
+        <Select.Trigger class="{selectTrigger} w-44" aria-label="Key role">
           <span class="truncate">{keyRole}</span>
-          <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+          <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
         </Select.Trigger>
         <Select.Portal>
           <Select.Content class={selectContent}>
@@ -339,10 +394,10 @@
       <button
         class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
         disabled={keysBusy}
-      ><Plus class="size-3.5" /> Create key</button>
+      ><Plus class="size-3.5" /> {keysBusy ? "Creating…" : "Create key"}</button>
     </form>
 
-    <p class="mt-2 text-xs text-zinc-400">
+    <p class="mt-2 text-xs text-zinc-500">
       Keys are shown in full only once and stored hashed - revoke immediately if one leaks.
     </p>
   </div>
@@ -356,15 +411,15 @@
       <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
         <UserRoundPlus class="size-4" /> Add user
       </Dialog.Title>
-      <Dialog.Description class="mb-4 text-sm text-zinc-400">
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
         A random password is generated - hand it over once, they change it on first sign-in.
       </Dialog.Description>
       <form onsubmit={addUser} class="flex flex-col gap-3">
-        <input class={inputCls} type="text" placeholder="Username" bind:value={username} required />
+        <input class={inputCls} type="text" placeholder="Username" aria-label="Username" bind:value={username} required />
         <Select.Root type="single" bind:value={role}>
-          <Select.Trigger class="{selectTrigger} w-full">
+          <Select.Trigger class="{selectTrigger} w-full" aria-label="Role">
             <span class="truncate">{role}</span>
-            <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+            <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
           </Select.Trigger>
           <Select.Portal>
             <Select.Content class={selectContent}>
@@ -387,36 +442,51 @@
           <button
             class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"
             disabled={busy}
-          >Create</button>
+          >{busy ? "Creating…" : "Create user"}</button>
         </div>
       </form>
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
 
+{#snippet secretBlock(secret)}
+  <!-- select-all: one click selects the whole secret if copying fails -->
+  <pre class="mt-3 rounded-lg bg-zinc-50 p-3 font-mono text-xs break-all whitespace-pre-wrap select-all">{secret}</pre>
+  {#if secretWarn && !secretSaved}
+    <p class="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800" role="alert">
+      You haven't copied or saved it yet. It can't be shown again once this closes.
+    </p>
+  {/if}
+{/snippet}
+
+<!-- one-time secrets: Esc and outside clicks don't close these dialogs -->
 <Dialog.Root bind:open={credsOpen}>
   <Dialog.Portal>
     <Dialog.Overlay class={dialogOverlay} />
-    <Dialog.Content class="{dialogContent} w-96">
+    <Dialog.Content
+      class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]"
+      escapeKeydownBehavior="ignore"
+      interactOutsideBehavior="ignore"
+    >
       <Dialog.Title class="flex items-center gap-2 font-semibold">
         <KeyRound class="size-4" /> {creds?.username}
       </Dialog.Title>
-      <Dialog.Description class="mt-1 text-sm text-zinc-400">
+      <Dialog.Description class="mt-1 text-sm text-zinc-600">
         Copy this password now - it is never shown again. The login file carries the URL too.
       </Dialog.Description>
-      <pre class="mt-3 rounded-lg bg-zinc-50 p-3 font-mono text-xs break-all whitespace-pre-wrap">{creds?.password}</pre>
-      <div class="mt-3 flex justify-end gap-2">
-        <button
-          class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-          onclick={downloadCreds}
+      {@render secretBlock(creds?.password)}
+      <div class="mt-3 flex flex-wrap justify-end gap-2">
+        <button class="{btnSecondary} flex items-center gap-1.5" onclick={downloadCreds}
         ><Download class="size-3.5" /> Login file</button>
-        <button
-          class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-          onclick={copyPassword}
-        ><Copy class="size-3.5" /> Copy</button>
-        <Dialog.Close
-          class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on"
-        >Done</Dialog.Close>
+        <CopyButton
+          class="{btnSecondary} flex items-center gap-1.5"
+          title="Copy password"
+          label="Copy"
+          text={creds?.password ?? ""}
+          oncopied={() => (secretSaved = true)}
+        />
+        <button class={btnPrimary} onclick={() => closeSecret(() => (credsOpen = false))}
+        >{secretWarn && !secretSaved ? "Close anyway" : "Done"}</button>
       </div>
     </Dialog.Content>
   </Dialog.Portal>
@@ -428,28 +498,72 @@
   title={`Set password for ${passTarget}`}
   label="Min 8 characters - changing it signs that user out everywhere."
   password
+  minLength={8}
+  submitLabel="Set password"
   onsubmit={(v) => setPassword(v)}
 />
+
+<Dialog.Root bind:open={roleOpen}>
+  <Dialog.Portal>
+    <Dialog.Overlay class={dialogOverlay} />
+    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
+      <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
+        <UserCog class="size-4" /> Role for {roleTarget?.username}
+      </Dialog.Title>
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
+        Applies right away, including to sessions already signed in.
+      </Dialog.Description>
+      <form onsubmit={saveRole} class="flex flex-col gap-3">
+        <Select.Root type="single" bind:value={roleValue}>
+          <Select.Trigger class="{selectTrigger} w-full" aria-label="Role">
+            <span class="truncate">{roleValue}</span>
+            <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
+          </Select.Trigger>
+          <Select.Portal>
+            <Select.Content class={selectContent}>
+              {#each roleItems as r (r.value)}
+                <Select.Item value={r.value} class={selectItem}>
+                  <div class="font-medium">{r.value}</div>
+                  <div class="text-xs text-zinc-500">{roleDesc[r.value]}</div>
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Portal>
+        </Select.Root>
+        <div class="mt-1 flex justify-end gap-2">
+          <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
+          <button class={btnPrimary} disabled={roleBusy}>{roleBusy ? "Saving…" : "Change role"}</button>
+        </div>
+      </form>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
 
 <Dialog.Root bind:open={newKeyOpen} onOpenChange={(o) => { if (!o) newKey = null; }}>
   <Dialog.Portal>
     <Dialog.Overlay class={dialogOverlay} />
-    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
+    <Dialog.Content
+      class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]"
+      escapeKeydownBehavior="ignore"
+      interactOutsideBehavior="ignore"
+    >
       <Dialog.Title class="flex items-center gap-2 font-semibold">
         <KeyRound class="size-4" /> {newKey?.name}
       </Dialog.Title>
-      <Dialog.Description class="mt-1 text-sm text-zinc-400">
+      <Dialog.Description class="mt-1 text-sm text-zinc-600">
         Copy this key now - it is never shown again.
       </Dialog.Description>
-      <pre class="mt-3 rounded-lg bg-zinc-50 p-3 font-mono text-xs break-all whitespace-pre-wrap">{newKey?.key}</pre>
+      {@render secretBlock(newKey?.key)}
       <div class="mt-3 flex justify-end gap-2">
-        <button
-          class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-          onclick={copyKey}
-        ><Copy class="size-3.5" /> Copy</button>
-        <Dialog.Close
-          class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on"
-        >Done</Dialog.Close>
+        <CopyButton
+          class="{btnSecondary} flex items-center gap-1.5"
+          title="Copy key"
+          label="Copy"
+          text={newKey?.key ?? ""}
+          oncopied={() => (secretSaved = true)}
+        />
+        <button class={btnPrimary} onclick={() => closeSecret(() => { newKeyOpen = false; newKey = null; })}
+        >{secretWarn && !secretSaved ? "Close anyway" : "Done"}</button>
       </div>
     </Dialog.Content>
   </Dialog.Portal>

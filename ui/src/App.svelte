@@ -10,6 +10,8 @@
   import History from "@lucide/svelte/icons/history";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Menu from "@lucide/svelte/icons/menu";
+  import Table2 from "@lucide/svelte/icons/table-2";
+  import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import X from "@lucide/svelte/icons/x";
   import GenArt from "./lib/GenArt.svelte";
   import ArtBackground from "./lib/ArtBackground.svelte";
@@ -30,14 +32,52 @@
   import SettingsView from "./lib/SettingsView.svelte";
   import { applyFavicon } from "./lib/favicon.js";
 
-  // last active view survives a refresh (current table already persists
-  // separately in tables.svelte.js)
+  // The view and table live in the URL hash (#/tables/orders, #/audit), so
+  // Back/Forward work and a table can be bookmarked or shared; localStorage
+  // still restores the last view when the URL has none.
   const VIEWS = ["dashboard", "tables", "api", "access", "audit", "settings"];
-  let view = $state(VIEWS.includes(localStorage.getItem("nori-view")) ? localStorage.getItem("nori-view") : "dashboard");
+
+  function parseHash() {
+    const [, v, ...rest] = location.hash.replace(/^#/, "").split("/");
+    if (!VIEWS.includes(v)) return null;
+    return { view: v, table: v === "tables" && rest.length ? decodeURIComponent(rest.join("/")) : null };
+  }
+
+  const initial = parseHash();
+  if (initial?.table) openTable(initial.table);
+  let view = $state(initial?.view ?? (VIEWS.includes(localStorage.getItem("nori-view")) ? localStorage.getItem("nori-view") : "dashboard"));
   let drawerOpen = $state(false);
 
+  function hashFor(v, table) {
+    return v === "tables" && table ? `#/tables/${encodeURIComponent(table)}` : `#/${v}`;
+  }
+
+  // state -> URL: a new history entry per navigation (first one replaces)
+  let firstSync = true;
   $effect(() => {
     localStorage.setItem("nori-view", view);
+    const want = hashFor(view, tables.current);
+    if (location.hash === want) return;
+    if (firstSync) history.replaceState(null, "", want);
+    else history.pushState(null, "", want);
+    firstSync = false;
+  });
+
+  // URL -> state: Back/Forward and edited links
+  $effect(() => {
+    const onHash = () => {
+      const h = parseHash();
+      if (!h) return;
+      if (h.table && h.table !== tables.current) openTable(h.table);
+      view = h.view;
+      drawerOpen = false;
+    };
+    window.addEventListener("popstate", onHash);
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      window.removeEventListener("popstate", onHash);
+      window.removeEventListener("hashchange", onHash);
+    };
   });
   // the dashboard is admin-only; verify the stored session server-side on
   // boot so a spoofed localStorage role cannot render the admin shell
@@ -48,15 +88,21 @@
     applyFavicon(branding);
   });
 
-  // Reset the active view only when the session actually changes
-  // (login/logout), so a restricted account never lands on the previous
-  // admin's view - and a plain refresh keeps the view it was on.
+  // Reset the active view only when a different person signs in, so a
+  // restricted account never lands on the previous admin's view - while the
+  // same admin signing back in after an expired session (or a refresh)
+  // keeps their place.
+  let lastUser = localStorage.getItem("nori-last-user") ?? "";
   let prevToken = auth.token;
   $effect(() => {
     if (auth.token === prevToken) return;
     prevToken = auth.token;
-    view = "dashboard";
     drawerOpen = false;
+    if (!auth.token) return;
+    // first sign-in on this browser keeps the view too (a shared link)
+    if (lastUser && auth.username !== lastUser) view = "dashboard";
+    lastUser = auth.username;
+    localStorage.setItem("nori-last-user", lastUser);
   });
 
   $effect(() => {
@@ -93,7 +139,10 @@
     else goto("tables");
   }
 
+  let sampleBusy = $state(false);
+
   async function loadSample() {
+    sampleBusy = true;
     try {
       const res = await fetch("/api/sample.xlsx", {
         headers: { Authorization: "Bearer " + auth.token },
@@ -107,7 +156,34 @@
       );
     } catch (err) {
       showToast(err.message, "error");
+    } finally {
+      sampleBusy = false;
     }
+  }
+
+  // drag an .xlsx anywhere onto the dashboard to import it
+  let dragging = $state(false);
+  let dragDepth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+
+  function onDragEnter(e) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    dragging = true;
+  }
+  function onDragLeave(e) {
+    if (!hasFiles(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dragging = false;
+  }
+  function onDrop(e) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dragging = false;
+    const f = e.dataTransfer.files[0];
+    if (f) importRef.choose(f);
   }
 
   async function signOut() {
@@ -138,9 +214,9 @@
   const sideItemCls = (active) =>
     "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors " +
     (active ? "bg-brand text-brand-on" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900");
-  const sideLabelCls = "px-3 pb-1 pt-4 text-[11px] font-semibold tracking-wider text-zinc-400 uppercase";
+  const sideLabelCls = "px-3 pb-1 pt-4 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase";
   const mobileTabCls = (active) =>
-    "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm whitespace-nowrap " +
+    "flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] " +
     (active ? "bg-zinc-100 font-medium text-zinc-900" : "text-zinc-500");
 </script>
 
@@ -201,7 +277,7 @@
   <Login />
 {:else if !verified}
   <div class="grid min-h-screen place-items-center bg-zinc-50">
-    <p class="text-sm text-zinc-400">Loading…</p>
+    <p class="text-sm text-zinc-500">Loading…</p>
   </div>
 {:else if auth.role !== "admin"}
   <!-- dashboard is admin-only; editor/viewer accounts are for API use -->
@@ -217,7 +293,23 @@
     >Sign out</button>
   </div>
 {:else}
-  <div class="flex h-screen overflow-hidden">
+  <div
+    class="flex h-screen overflow-hidden"
+    role="presentation"
+    ondragenter={onDragEnter}
+    ondragover={(e) => hasFiles(e) && e.preventDefault()}
+    ondragleave={onDragLeave}
+    ondrop={onDrop}
+  >
+    {#if dragging}
+      <div class="pointer-events-none fixed inset-0 z-[70] grid place-items-center bg-white/80 p-6 backdrop-blur-sm">
+        <div class="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-zinc-400 px-10 py-12 text-center">
+          <Upload class="size-8 text-zinc-500" />
+          <p class="font-semibold text-zinc-900">Drop an .xlsx file to import it</p>
+          <p class="text-sm text-zinc-500">Every sheet becomes a table</p>
+        </div>
+      </div>
+    {/if}
 
     <!-- Desktop sidebar -->
     <aside class="hidden w-56 shrink-0 flex-col border-r border-zinc-200 bg-white/70 backdrop-blur-sm md:flex">
@@ -247,6 +339,7 @@
           <button
             class="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
             title="Menu"
+            aria-label="Open menu"
             onclick={() => (drawerOpen = true)}
           ><Menu class="size-5" /></button>
           <span class="flex min-w-0 items-center gap-2 font-bold text-zinc-900">
@@ -254,13 +347,7 @@
             <span class="truncate">{branding.name}</span>
           </span>
         </div>
-        <div class="flex items-center gap-2">
-          <span class="max-w-24 truncate text-xs font-medium text-zinc-600">{auth.username}</span>
-          <button
-            class="flex shrink-0 items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"
-            onclick={signOut}
-          ><LogOut class="size-3.5" /> Sign out</button>
-        </div>
+        <span class="max-w-28 truncate text-xs font-medium text-zinc-600">{auth.username}</span>
       </header>
 
       <!-- static frame + inner scroll window: cards sliced while scrolling
@@ -272,7 +359,7 @@
                on mobile so pb-24 keeps the last card clear of the tab bar -->
           <div class="anim-fade flex flex-col pb-24 md:min-h-0 md:flex-1 md:pb-2">
             {#if view === "dashboard"}
-              <DashboardView ongoto={goto} onimport={() => importRef.pick()} onnewtable={() => (newTableOpen = true)} onsample={loadSample} />
+              <DashboardView ongoto={goto} onimport={() => importRef.pick()} onnewtable={() => (newTableOpen = true)} onsample={loadSample} {sampleBusy} />
             {:else if view === "tables"}
               <TablesView bind:this={tablesViewRef} onimport={() => importRef.pick()} ongoto={goto} />
             {:else if view === "api"}
@@ -289,37 +376,19 @@
         </div>
       </main>
 
-      <!-- Mobile bottom nav: dashboard + tables -->
-      <nav class="fixed inset-x-0 bottom-0 z-30 flex items-center gap-1 overflow-x-auto border-t border-zinc-200 bg-white/90 px-2 py-1.5 backdrop-blur-sm md:hidden">
-        <a
-          href="#"
-          class={mobileTabCls(view === "dashboard")}
-          onclick={(e) => {
-            e.preventDefault();
-            goto("dashboard");
-          }}
-        >
-          <LayoutDashboard class="size-4" /> Dashboard
-        </a>
-        {#each tables.list as t (t.name)}
-          {@const active = view === "tables" && tables.current === t.name}
-          <a
-            href="#"
-            class={mobileTabCls(active)}
-            onclick={(e) => {
-              e.preventDefault();
-              pickTable(t.name);
-            }}
-          >
-            <GenArt seed={t.name} variant={3} w={64} h={64} class="size-5 shrink-0 rounded-md border border-zinc-200" />
-            {t.name}
-          </a>
+      <!-- Mobile bottom nav: fixed four tabs - one Tables tab (the table
+           picker sits in the Tables view) and More for everything else -->
+      <nav class="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-zinc-200 bg-white/90 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur-sm md:hidden" aria-label="Main">
+        {#each [{ v: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { v: "tables", label: "Tables", icon: Table2 }, { v: "api", label: "API", icon: Braces }] as t (t.v)}
+          <button class={mobileTabCls(view === t.v)} aria-current={view === t.v ? "page" : undefined} onclick={() => goto(t.v)}>
+            <t.icon class="size-5" />
+            <span>{t.label}</span>
+          </button>
         {/each}
-        <button
-          class="ml-auto mr-1.5 flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-2 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-          title="New table"
-          onclick={() => (newTableOpen = true)}
-        ><Plus class="size-4" /></button>
+        <button class={mobileTabCls(["access", "audit", "settings"].includes(view))} onclick={() => (drawerOpen = true)}>
+          <Ellipsis class="size-5" />
+          <span>More</span>
+        </button>
       </nav>
     </div>
   </div>
@@ -341,6 +410,13 @@
           ><X class="size-5" /></Dialog.Close>
         </div>
         {@render sideNav()}
+        <div class="flex items-center justify-between gap-2 border-t border-zinc-200 px-4 py-3">
+          <span class="min-w-0 truncate text-sm font-medium text-zinc-700">{auth.username}</span>
+          <button
+            class="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+            onclick={signOut}
+          ><LogOut class="size-3.5" /> Sign out</button>
+        </div>
       </Dialog.Content>
     </Dialog.Portal>
   </Dialog.Root>

@@ -51,6 +51,7 @@
     delete_table: "table dropped with all its rows",
     set_password: "password changed - other sessions of this user were revoked",
     create_user: "account created",
+    set_role: "role changed - applies to live sessions at once",
     login: "signed in",
     login_failed: "sign-in failed (wrong credentials)",
   };
@@ -65,9 +66,9 @@
 
   <div class="mb-3 flex flex-wrap items-center gap-2">
     <Select.Root type="single" bind:value={tableSel}>
-      <Select.Trigger class="{selectTriggerSm} w-44">
+      <Select.Trigger class="{selectTriggerSm} w-44" aria-label="Filter by table">
         <span class="truncate">{tableSel === "__all__" ? "All tables" : tableSel}</span>
-        <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+        <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
       </Select.Trigger>
       <Select.Portal>
         <Select.Content class={selectContent}>
@@ -86,9 +87,9 @@
       >row {rowId} <X class="size-3" /></button>
     {/if}
     <Select.Root type="single" bind:value={limit}>
-      <Select.Trigger class="{selectTriggerSm} w-20">
+      <Select.Trigger class="{selectTriggerSm} w-20" aria-label="Number of events">
         <span class="truncate">{limit}</span>
-        <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+        <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
       </Select.Trigger>
       <Select.Portal>
         <Select.Content class={selectContent}>
@@ -102,7 +103,7 @@
       class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
       onclick={load}
       disabled={loading}
-    ><History class="size-3.5" /> Refresh</button>
+    ><History class="size-3.5" /> {loading ? "Loading…" : "Refresh"}</button>
   </div>
 
   <!-- two layers: the static frame insets the scroll window, so rows sliced
@@ -119,12 +120,12 @@
             <span class="text-sm font-medium text-zinc-900">{e.table}</span>
             {#if e.rowId}
               <button
-                class="font-mono text-xs text-zinc-400 hover:text-zinc-900 hover:underline"
+                class="font-mono text-xs text-zinc-500 hover:text-zinc-900 hover:underline"
                 title="Show only this row"
                 onclick={() => (rowId = e.rowId)}
               >row {e.rowId}</button>
             {/if}
-            <span class="ml-auto flex shrink-0 items-center gap-2 text-xs text-zinc-400">
+            <span class="ml-auto flex shrink-0 items-center gap-2 text-xs text-zinc-500">
               {e.user}
               <span title={new Date(e.at).toLocaleString()}>{when(e.at)}</span>
             </span>
@@ -132,14 +133,14 @@
           {#if Object.keys(vals).length > 0 || note}
             <p class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
               {#if note}
-                <span class="text-zinc-400">{note}</span>
+                <span class="text-zinc-500">{note}</span>
               {/if}
               {#if e.action === "delete_row"}
-                <span class="text-zinc-400">removed - full copy kept in this trail:</span>
+                <span class="text-zinc-500">removed - full copy kept in this trail:</span>
               {/if}
               {#each Object.entries(vals) as [k, v] (k)}
                 <span class="text-zinc-500">
-                  <span class="text-zinc-400">{k}</span>
+                  <span class="text-zinc-500">{k}</span>
                   {e.action === "update_row" ? "→" : ":"} {v === "" ? '""' : cut(v)}
                 </span>
               {/each}
@@ -147,7 +148,7 @@
           {/if}
         </li>
       {:else}
-        <li class="px-4 py-8 text-center text-sm text-zinc-500">No audit events{table ? ` for ${table}` : ""}.</li>
+        <li class="px-4 py-8 text-center text-sm text-zinc-500">{loading ? "Loading audit trail…" : `No audit events${table ? ` for ${table}` : ""}.`}</li>
       {/each}
     </ul>
       <!-- spacer: scrolled content never ends flush against the card border -->

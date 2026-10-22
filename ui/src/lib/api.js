@@ -22,7 +22,7 @@ export async function api(path, options = {}) {
     body = text;
   }
   if (res.status === 401 && !path.endsWith("/login")) {
-    clearSession();
+    clearSession("expired");
     throw new ApiError("Session expired, please sign in again", 401);
   }
   if (!res.ok) {

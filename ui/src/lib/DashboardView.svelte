@@ -12,7 +12,9 @@
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Upload from "@lucide/svelte/icons/upload";
 
-  let { ongoto, onimport, onnewtable, onsample } = $props();
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+
+  let { ongoto, onimport, onnewtable, onsample, sampleBusy = false } = $props();
 
   let usage = $state(null);
   let status = $state(null);
@@ -56,16 +58,31 @@
   const sectionCls = "rounded-lg border border-zinc-200 bg-white p-4";
   const tileCls = "flex flex-col gap-1 rounded-lg border border-zinc-200 bg-white p-4";
 
+  let refreshing = $state(false);
+  let loadedAt = $state(null);
+
+  // quiet: the 60s timer refreshes without toasting the same error again
+  async function refresh(quiet = false) {
+    refreshing = true;
+    const fail = (err) => {
+      if (!quiet) showToast(err.message, "error");
+    };
+    await Promise.all([
+      api("/api/usage").then((u) => (usage = u)).catch(fail),
+      api("/api/status").then((s) => (status = s)).catch(fail),
+      api("/api/audit?limit=8").then((r) => (recent = r)).catch(fail),
+    ]);
+    loadedAt = new Date();
+    refreshing = false;
+  }
+
+  // numbers (requests, backup age) stay current while the page is open
   $effect(() => {
-    api("/api/usage")
-      .then((u) => (usage = u))
-      .catch((err) => showToast(err.message, "error"));
-    api("/api/status")
-      .then((s) => (status = s))
-      .catch((err) => showToast(err.message, "error"));
-    api("/api/audit?limit=8")
-      .then((r) => (recent = r))
-      .catch((err) => showToast(err.message, "error"));
+    refresh();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refresh(true);
+    }, 60000);
+    return () => clearInterval(timer);
   });
 </script>
 
@@ -73,13 +90,22 @@
   <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
     <div>
       <h2 class="text-sm font-semibold">Dashboard</h2>
-      <p class="text-xs text-zinc-500">Traffic, capacity, and server health</p>
+      <p class="flex items-center gap-1.5 text-xs text-zinc-500">
+        Traffic, capacity, and server health
+        <button
+          class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50"
+          title={loadedAt ? `Updated ${loadedAt.toLocaleTimeString()} - refreshes every minute` : "Refresh"}
+          aria-label="Refresh dashboard"
+          disabled={refreshing}
+          onclick={() => refresh()}
+        ><RefreshCw class="size-3 {refreshing ? 'animate-spin' : ''}" /></button>
+      </p>
     </div>
     {#if status}
       <!-- server metadata as a status line, not a strip: the full paths
            stay in GET /api/status, this keeps the glanceable tail -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500" title="version {status.version} - data {bytes(status.dataBytes)} in {status.dataDir}{status.diskFreeBytes > 0 ? `, ${bytes(status.diskFreeBytes)} disk free` : ''}">
-        <span class="font-mono text-zinc-400">{status.version}</span>
+        <span class="font-mono text-zinc-500">{status.version}</span>
         <span>up {duration(status.uptimeSeconds)}</span>
         <span class="tabular-nums">{bytes(status.dataBytes)}</span>
         {#if status.backup}
@@ -116,10 +142,11 @@
             onclick={() => onimport?.()}
           ><Upload class="size-4" /> Import xlsx</button>
           <button
-            class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50"
+            class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50 disabled:opacity-60"
             title="Generated workbook: Products, Customers, Orders"
+            disabled={sampleBusy}
             onclick={() => onsample?.()}
-          ><Download class="size-4" /> Try sample data</button>
+          ><Download class="size-4 {sampleBusy ? 'animate-pulse' : ''}" /> {sampleBusy ? "Loading sample…" : "Try sample data"}</button>
           <button
             class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50"
             onclick={() => onnewtable?.()}
@@ -132,13 +159,13 @@
     <div class="flex flex-col gap-4 sm:grid sm:grid-cols-3">
     <div class={tileCls}>
       <span class="text-xs text-zinc-500">Requests, last 24h</span>
-      <span class="text-2xl font-semibold tabular-nums">{usage ? usage.requests24h.toLocaleString() : "…"}</span>
+      <span class="text-2xl font-semibold tabular-nums">{usage.requests24h.toLocaleString()}</span>
     </div>
     <div class={tileCls}>
       <span class="text-xs text-zinc-500">Busiest table</span>
       {#if hottest}
         <span class="truncate text-2xl font-semibold">{hottest.name}</span>
-        <span class="text-xs text-zinc-400">{hottest.count.toLocaleString()} requests</span>
+        <span class="text-xs text-zinc-500">{hottest.count.toLocaleString()} requests</span>
       {:else}
         <span class="text-2xl font-semibold text-zinc-300">-</span>
       {/if}
@@ -146,7 +173,7 @@
     <div class={tileCls}>
       <span class="text-xs text-zinc-500">Rows stored</span>
       <span class="text-2xl font-semibold tabular-nums">{usage ? totalRows.toLocaleString() : "…"}</span>
-      <span class="text-xs text-zinc-400">across {usage?.tables?.length ?? 0} tables</span>
+      <span class="text-xs text-zinc-500">across {usage?.tables?.length ?? 0} tables</span>
     </div>
   </div>
 
@@ -165,7 +192,7 @@
           {/each}
         </div>
       {:else}
-        <p class="text-xs text-zinc-400">Loading…</p>
+        <p class="text-xs text-zinc-500">Loading…</p>
       {/if}
     </div>
 
@@ -193,7 +220,7 @@
           </div>
         {/each}
         {#if (usage?.tables?.length ?? 0) === 0}
-          <p class="text-xs text-zinc-400">No tables yet.</p>
+          <p class="text-xs text-zinc-500">No tables yet.</p>
         {/if}
         </div>
       </div>
@@ -213,14 +240,16 @@
         <li class="flex flex-wrap items-center gap-2 py-2.5 text-xs">
           <span class="rounded-full px-2 py-0.5 font-medium {actionCls(e.action)}">{e.action}</span>
           <span class="font-medium text-zinc-900">{e.table}</span>
-          <span class="ml-auto flex shrink-0 items-center gap-2 text-zinc-400">
+          <span class="ml-auto flex shrink-0 items-center gap-2 text-zinc-500">
             {e.user} · {ago(e.at)}
           </span>
         </li>
       {:else}
-        <li class="py-2 text-xs text-zinc-400">No changes yet - edits will show up here.</li>
+        <li class="py-2 text-xs text-zinc-500">No changes yet - edits will show up here.</li>
       {/each}
     </ul>
   </div>
+  {:else}
+    <p class="py-12 text-center text-sm text-zinc-500">Loading dashboard…</p>
   {/if}
 </div>

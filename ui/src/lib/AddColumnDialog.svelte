@@ -42,7 +42,7 @@
       <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
         <Columns3 class="size-4" /> Add column
       </Dialog.Title>
-      <Dialog.Description class="mb-4 text-sm text-zinc-400">
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
         Existing rows get an empty value for the new column.
       </Dialog.Description>
       <form onsubmit={submit} class="flex flex-col gap-4">
@@ -54,9 +54,9 @@
           required
         />
         <Select.Root type="single" bind:value={colType}>
-          <Select.Trigger class="{selectTrigger} w-full">
+          <Select.Trigger class="{selectTrigger} w-full" aria-label="Column type">
             <span class="truncate">{colType}</span>
-            <ChevronDown class="size-3.5 shrink-0 text-zinc-400" />
+            <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
           </Select.Trigger>
           <Select.Portal>
             <Select.Content class={selectContent}>
@@ -86,7 +86,7 @@
           <button
             class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"
             disabled={busy}
-          >Add</button>
+          >{busy ? "Adding…" : "Add column"}</button>
         </div>
       </form>
     </Dialog.Content>
