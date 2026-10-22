@@ -53,7 +53,7 @@ Chosen so a full table still fits the row cache, below the xlsx format limits (1
 
 | Limit | Value | Enforced at |
 |---|---|---|
-| Rows per table | 200,000 (also the largest table the row cache holds; 400,000 rows total across cached tables) | add row, import replace/append → `400 table is full` |
+| Rows per table | 200,000 (tables up to this size may be row-cached, within the shared budget: 400,000 rows or 200 MB total across cached tables) | add row, import replace/append → `400 table is full` |
 | Columns per table | 256 | create table, add column, import → `400 too many columns` |
 | Import file size | 64 MB (`413` over) | multipart body of `POST /api/import` |
 | Worksheet decompression | 64 MB per file, 256 MB per archive | import parsing (zip-bomb guard) |
