@@ -170,6 +170,7 @@ func (a *auditLog) enforceRetention() {
 func (sv *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 	table := r.URL.Query().Get("table")
 	rowID := r.URL.Query().Get("rowId")
+	actor := r.URL.Query().Get("user")
 	limit := 100
 	if v := r.URL.Query().Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
@@ -185,6 +186,11 @@ func (sv *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		if rowID != "" {
 			if rid, _ := doc.Get("rowId").(string); rid != rowID {
+				return false
+			}
+		}
+		if actor != "" {
+			if u, _ := doc.Get("user").(string); u != actor {
 				return false
 			}
 		}

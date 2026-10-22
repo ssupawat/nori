@@ -9,6 +9,10 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import X from "@lucide/svelte/icons/x";
 
+  // sub: "user/<actor>" filters by who made the change (set from Access)
+  let { sub = "", onsub } = $props();
+  const actor = $derived(sub.startsWith("user/") ? decodeURIComponent(sub.slice(5)) : "");
+
   let entries = $state([]);
   let tableSel = $state("__all__");
   let rowId = $state("");
@@ -22,6 +26,7 @@
       const p = new URLSearchParams();
       if (table) p.set("table", table);
       if (rowId) p.set("rowId", rowId);
+      if (actor) p.set("user", actor);
       p.set("limit", String(limit));
       entries = await api(`/api/audit?${p}`);
     } catch (err) {
@@ -79,6 +84,13 @@
         </Select.Content>
       </Select.Portal>
     </Select.Root>
+    {#if actor}
+      <button
+        class="flex items-center gap-1 rounded-full bg-brand px-2.5 py-1 text-xs text-brand-on"
+        aria-label="Clear filter: changes by {actor}"
+        onclick={() => onsub?.("")}
+      >by {actor} <X class="size-3" /></button>
+    {/if}
     {#if rowId}
       <button
         class="flex items-center gap-1 rounded-full bg-brand px-2.5 py-1 text-xs text-brand-on"
@@ -148,7 +160,7 @@
           {/if}
         </li>
       {:else}
-        <li class="px-4 py-8 text-center text-sm text-zinc-500">{loading ? "Loading audit trail…" : `No audit events${table ? ` for ${table}` : ""}.`}</li>
+        <li class="px-4 py-8 text-center text-sm text-zinc-500">{loading ? "Loading audit trail…" : `No audit events${actor ? ` by ${actor}` : ""}${table ? ` for ${table}` : ""}.`}</li>
       {/each}
     </ul>
       <!-- spacer: scrolled content never ends flush against the card border -->

@@ -1,41 +1,111 @@
 <script>
-  import { Dialog, Select, DropdownMenu } from "bits-ui";
+  import { Dialog, Select, DropdownMenu, Popover } from "bits-ui";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
   import UserRoundPlus from "@lucide/svelte/icons/user-round-plus";
-  import UserRoundX from "@lucide/svelte/icons/user-round-x";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Plus from "@lucide/svelte/icons/plus";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
-  import UserCog from "@lucide/svelte/icons/user-cog";
-  import CopyButton from "./CopyButton.svelte";
   import Download from "@lucide/svelte/icons/download";
-  import GenArt from "./GenArt.svelte";
+  import UserCog from "@lucide/svelte/icons/user-cog";
+  import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
+  import History from "@lucide/svelte/icons/history";
+  import Search from "@lucide/svelte/icons/search";
+  import CircleHelp from "@lucide/svelte/icons/circle-help";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import CopyButton from "./CopyButton.svelte";
   import RoleBadge from "./RoleBadge.svelte";
+  import TableIcon from "./TableIcon.svelte";
   import PromptDialog from "./PromptDialog.svelte";
   import { api } from "./api.js";
-  import { inputCls, dialogOverlay, dialogContent, btnPrimary, btnSecondary } from "./cls.js";
+  import { inputCls, dialogOverlay, dialogContent, btnPrimary, btnSecondary, selectTrigger, selectContent, selectItem } from "./cls.js";
   import { auth } from "./auth.svelte.js";
   import { branding } from "./branding.svelte.js";
   import { showToast } from "./toast.svelte.js";
   import { askConfirm } from "./confirm.svelte.js";
   import { ago } from "./fmt.js";
-  import { selectTrigger, selectContent, selectItem } from "./cls.js";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+
+  // sub: "" = People tab, "keys" = API keys tab
+  let { sub = "", onsub } = $props();
+  const tab = $derived(sub === "keys" ? "keys" : "people");
+
+  const ROLES = ["admin", "editor", "viewer", "builder"];
+  const roleDesc = {
+    admin: "Full access: tables, columns, rows, import/export, users, API keys, branding. The only role that can use this dashboard.",
+    editor: "Create, edit and delete rows in every table.",
+    viewer: "Read-only: browse tables and rows, export.",
+    builder: "Builds against the API without seeing data: table names, columns and docs only, never rows.",
+  };
+  const roleShort = {
+    admin: "full access, including this dashboard",
+    editor: "can edit data",
+    viewer: "read only",
+    builder: "schema and docs only, never rows",
+  };
 
   let users = $state([]);
-  let addOpen = $state(false);
-  let username = $state("");
-  let role = $state("viewer");
-  let busy = $state(false);
-  // generated password from the last create, shown once
-  let creds = $state(null);
-  let credsOpen = $state(false);
+  let keys = $state([]);
   let usersLoaded = $state(false);
   let keysLoaded = $state(false);
 
-  // one-time secrets (new password / new key): closing before a copy or
-  // download asks once
+  async function loadUsers() {
+    try {
+      users = await api("/api/users/");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      usersLoaded = true;
+    }
+  }
+
+  async function loadKeys() {
+    try {
+      keys = await api("/api/keys/");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      keysLoaded = true;
+    }
+  }
+
+  $effect(() => {
+    loadUsers();
+    loadKeys();
+  });
+
+  // ---- search + role filter, per tab ----
+  let query = $state("");
+  let roleFilter = $state("");
+  $effect(() => {
+    void tab;
+    query = "";
+    roleFilter = "";
+  });
+
+  const items = $derived(tab === "keys" ? keys : users);
+  const nameOf = (it) => it.username ?? it.name;
+  const shown = $derived(
+    items.filter(
+      (it) =>
+        (!roleFilter || it.role === roleFilter) &&
+        (!query || nameOf(it).toLowerCase().includes(query.trim().toLowerCase()))
+    )
+  );
+  const counts = $derived(Object.fromEntries(ROLES.map((r) => [r, items.filter((it) => it.role === r).length])));
+
+  const DAY = 86400000;
+  // no sign-in / use for 30 days (counted from creation when never used)
+  function stale(lastAt, createdAt) {
+    const ref = lastAt || createdAt;
+    return !!ref && Date.now() - Date.parse(ref) > 30 * DAY;
+  }
+
+  function viewActivity(actor) {
+    location.hash = `#/audit/user/${encodeURIComponent(actor)}`;
+  }
+
+  // ---- one-time secrets (new password / new key) ----
+  // closing before a copy or download asks once
   let secretSaved = $state(false);
   let secretWarn = $state(false);
 
@@ -47,20 +117,13 @@
     close();
   }
 
-  async function load() {
-    try {
-      users = await api("/api/users/");
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      usersLoaded = true;
-    }
-  }
-
-  $effect(() => {
-    load();
-    loadKeys();
-  });
+  // ---- people ----
+  let addOpen = $state(false);
+  let username = $state("");
+  let role = $state("viewer");
+  let busy = $state(false);
+  let creds = $state(null);
+  let credsOpen = $state(false);
 
   async function addUser(e) {
     e.preventDefault();
@@ -76,7 +139,7 @@
       secretSaved = false;
       secretWarn = false;
       credsOpen = true;
-      await load();
+      await loadUsers();
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -88,11 +151,11 @@
     const text = [
       `${branding.name} - your login`,
       "",
-      `URL:      ${location.origin}`,
       `Username: ${creds.username}`,
       `Password: ${creds.password}`,
       "",
-      "Please sign in and change this password right away.",
+      "Use these to sign in to the app you were given.",
+      `To change the password, sign in at ${location.origin}`,
     ].join("\n");
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
     const a = document.createElement("a");
@@ -148,7 +211,7 @@
       });
       showToast(`${roleTarget.username} is now ${roleValue}`);
       roleOpen = false;
-      await load();
+      await loadUsers();
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -161,45 +224,35 @@
     try {
       await api(`/api/users/${encodeURIComponent(name)}`, { method: "DELETE" });
       showToast(`Deleted user ${name}`);
-      await load();
+      await loadUsers();
     } catch (err) {
       showToast(err.message, "error");
     }
   }
 
-  // API keys for machines: agents, scripts, cron jobs
-  let keys = $state([]);
+  // ---- API keys ----
+  let keyOpen = $state(false);
   let keyName = $state("");
   let keyRole = $state("builder");
-  let newKey = $state(null); // full key, shown once
-  let newKeyOpen = $state(false);
   let keysBusy = $state(false);
-
-  async function loadKeys() {
-    try {
-      keys = await api("/api/keys/");
-    } catch (err) {
-      showToast(err.message, "error");
-    } finally {
-      keysLoaded = true;
-    }
-  }
+  let newKey = $state(null);
+  let newKeyOpen = $state(false);
 
   async function createKey(e) {
     e.preventDefault();
     if (!keyName.trim()) return;
     keysBusy = true;
     try {
-      const res = await api("/api/keys/", {
+      newKey = await api("/api/keys/", {
         method: "POST",
         body: JSON.stringify({ name: keyName.trim(), role: keyRole }),
       });
-      newKey = { ...res };
+      keyName = "";
+      keyRole = "builder";
+      keyOpen = false;
       secretSaved = false;
       secretWarn = false;
       newKeyOpen = true;
-      keyName = "";
-      keyRole = "builder";
       await loadKeys();
     } catch (err) {
       showToast(err.message, "error");
@@ -219,230 +272,261 @@
     }
   }
 
-  const roleDesc = {
-    admin: "full access, including this dashboard",
-    editor: "can edit data (API only)",
-    viewer: "read only (API only)",
-    builder: "schema and docs only, never rows (API only)",
-  };
-  const roleItems = [
-    { value: "builder" },
-    { value: "viewer" },
-    { value: "editor" },
-    { value: "admin" },
-  ];
-  const menuItem =
-    "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm data-highlighted:bg-zinc-100";
+  const menuItem = "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm data-highlighted:bg-zinc-100";
+  const chipCls = (on) =>
+    "rounded-full px-2.5 py-1 text-xs tabular-nums " +
+    (on ? "bg-brand text-brand-on" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200");
+  const tabCls = (on) =>
+    "flex items-center gap-2 border-b-2 px-1 pb-2 text-sm font-medium " +
+    (on ? "border-brand text-zinc-900" : "border-transparent text-zinc-500 hover:text-zinc-900");
+  // name | role | last activity | created | menu; on phones: name+role, then activity+menu
+  const rowGrid =
+    "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 md:grid-cols-[minmax(0,1fr)_7rem_12rem_7rem_2rem]";
 </script>
 
 <div class="w-full">
-  <div class="mb-3 flex items-start gap-3">
+  <div class="mb-4 flex items-start gap-3">
     <div class="min-w-0 flex-1">
       <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Access</h2>
-      <p class="mt-0.5 text-sm text-zinc-500">Human accounts and API keys - who can sign in, and what machines can do</p>
-      <div class="mt-1.5 flex flex-wrap gap-1.5">
-        <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{users.length} user{users.length === 1 ? "" : "s"}</span>
-        <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{keys.length} key{keys.length === 1 ? "" : "s"}</span>
-        {#each ["admin", "editor", "viewer", "builder"] as r (r)}
-          {@const n = users.filter((u) => u.role === r).length}
-          {#if n > 0}
-            <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{n} {r}{n === 1 ? "" : "s"}</span>
-          {/if}
-        {/each}
-      </div>
+      <p class="mt-0.5 text-sm text-zinc-500">People who sign in to apps built on {branding.name}, and keys for scripts and agents</p>
     </div>
-    {#if auth.role === "admin"}
-      <button
-        class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-        onclick={() => (addOpen = true)}
-      ><span class="flex items-center gap-1.5"><UserRoundPlus class="size-3.5" /> Add user</span></button>
+    {#if tab === "people"}
+      <button class="{btnSecondary} flex shrink-0 items-center gap-1.5" onclick={() => (addOpen = true)}>
+        <UserRoundPlus class="size-3.5" /> Add person
+      </button>
+    {:else}
+      <button class="{btnSecondary} flex shrink-0 items-center gap-1.5" onclick={() => (keyOpen = true)}>
+        <Plus class="size-3.5" /> Create key
+      </button>
     {/if}
   </div>
 
-<div class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start">
-  <div class="overflow-hidden rounded-lg border border-zinc-200 bg-white lg:col-span-2">
+  <div class="mb-3 flex gap-5 border-b border-zinc-200" role="tablist">
+    <button role="tab" aria-selected={tab === "people"} class={tabCls(tab === "people")} onclick={() => onsub?.("")}>
+      People <span class="rounded-full bg-zinc-100 px-1.5 text-xs text-zinc-600 tabular-nums">{users.length}</span>
+    </button>
+    <button role="tab" aria-selected={tab === "keys"} class={tabCls(tab === "keys")} onclick={() => onsub?.("keys")}>
+      API keys <span class="rounded-full bg-zinc-100 px-1.5 text-xs text-zinc-600 tabular-nums">{keys.length}</span>
+    </button>
+  </div>
+
+  <div class="mb-3 flex flex-wrap items-center gap-2">
+    <label class="relative block w-full sm:w-64">
+      <span class="sr-only">Search {tab === "keys" ? "keys" : "people"}</span>
+      <Search class="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-zinc-500" />
+      <input class="{inputCls} py-1.5 pl-8" type="search" placeholder={tab === "keys" ? "Search keys…" : "Search people…"} bind:value={query} />
+    </label>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <button class={chipCls(!roleFilter)} onclick={() => (roleFilter = "")}>All {items.length}</button>
+      {#each ROLES as r (r)}
+        {#if counts[r] > 0}
+          <button class={chipCls(roleFilter === r)} aria-pressed={roleFilter === r} onclick={() => (roleFilter = roleFilter === r ? "" : r)}>{r} {counts[r]}</button>
+        {/if}
+      {/each}
+    </div>
+    <Popover.Root>
+      <Popover.Trigger class="ml-auto flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900">
+        <CircleHelp class="size-3.5" /> Roles
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content class="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-zinc-200 bg-white p-3 shadow-lg" align="end" sideOffset={6}>
+          <ul class="flex flex-col gap-2.5">
+            {#each ROLES as r (r)}
+              <li>
+                <RoleBadge role={r} />
+                <p class="mt-1 text-xs leading-5 text-zinc-600">{roleDesc[r]}</p>
+              </li>
+            {/each}
+          </ul>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  </div>
+
+  <div class="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+    <div class="{rowGrid} hidden border-b border-zinc-200 bg-zinc-50 px-4 py-2 text-xs font-medium text-zinc-500 md:grid">
+      <span>Name</span>
+      <span>Role</span>
+      <span>{tab === "keys" ? "Last used" : "Last sign-in"}</span>
+      <span>Created</span>
+      <span></span>
+    </div>
     <ul class="divide-y divide-zinc-200">
-      {#each users as u (u.username)}
-        <li class="group flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50">
-          <GenArt seed={u.username} variant={3} w={64} h={64} class="size-8 shrink-0 rounded-full border border-zinc-200" />
-          <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium">
-              {u.username}
-              {#if u.username === auth.username}
-                <span class="ml-1 text-xs font-normal text-zinc-500">(you)</span>
+      {#if tab === "people"}
+        {#each shown as u (u.username)}
+          {@const self = u.username === auth.username}
+          <li class="{rowGrid} px-4 py-2.5 hover:bg-zinc-50">
+            <div class="flex min-w-0 items-center gap-3">
+              <TableIcon name={u.username} class="size-8 rounded-full text-xs" />
+              <div class="min-w-0">
+                <div class="truncate text-sm font-medium text-zinc-900">
+                  {u.username}{#if self}<span class="ml-1 text-xs font-normal text-zinc-500">(you)</span>{/if}
+                </div>
+                <div class="truncate text-xs text-zinc-500">{roleShort[u.role] ?? ""}</div>
+              </div>
+            </div>
+            <div class="justify-self-end md:justify-self-start">
+              {#if self}
+                <RoleBadge role={u.role} />
+              {:else}
+                <button class="flex items-center gap-0.5 rounded-full hover:opacity-80" title="Change role" onclick={() => askRole(u)}>
+                  <RoleBadge role={u.role} /><ChevronDown class="size-3 text-zinc-500" />
+                </button>
               {/if}
             </div>
-            <div class="text-xs text-zinc-500">{roleDesc[u.role] ?? roleDesc.viewer}</div>
-          </div>
-          <RoleBadge role={u.role} />
-          {#if auth.role === "admin" && u.username !== auth.username}
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger
-                class="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-                title="User actions"
-                aria-label="Actions for {u.username}"
-              >
-                <Ellipsis class="size-4" />
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  class="z-50 min-w-40 rounded-md border border-zinc-200 bg-white py-1 shadow-md"
-                  align="end"
-                >
-                  <DropdownMenu.Item class={menuItem} onSelect={() => askRole(u)}>
-                    <UserCog class="size-3.5" /> Change role
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item class={menuItem} onSelect={() => askSetPassword(u.username)}>
-                    <LockKeyhole class="size-3.5" /> Set password
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item class={menuItem + " text-red-600"} onSelect={() => deleteUser(u.username)}>
-                    <Trash2 class="size-3.5" /> Delete user
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          {/if}
-        </li>
+            <div class="min-w-0 text-xs">
+              <span class={stale(u.lastLoginAt, u.createdAt) ? "text-amber-600" : "text-zinc-600"}>
+                <span class="md:hidden">Last sign-in&nbsp;</span>{u.lastLoginAt ? ago(u.lastLoginAt) : "never"}{stale(u.lastLoginAt, u.createdAt) ? " · inactive 30d+" : ""}
+              </span>
+              {#if u.failedLogins > 0}
+                <span class="flex items-center gap-1 text-red-600">
+                  <TriangleAlert class="size-3" /> {u.failedLogins} failed sign-in{u.failedLogins === 1 ? "" : "s"} · {ago(u.lastFailedAt)}
+                </span>
+              {/if}
+            </div>
+            <div class="hidden text-xs text-zinc-500 md:block">{u.createdAt ? ago(u.createdAt) : "—"}</div>
+            <div class="justify-self-end">
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" aria-label="Actions for {u.username}">
+                  <Ellipsis class="size-4" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content class="z-50 min-w-44 rounded-md border border-zinc-200 bg-white py-1 shadow-md" align="end">
+                    <DropdownMenu.Item class={menuItem} onSelect={() => viewActivity(u.username)}>
+                      <History class="size-3.5" /> View activity
+                    </DropdownMenu.Item>
+                    {#if !self}
+                      <DropdownMenu.Item class={menuItem} onSelect={() => askRole(u)}>
+                        <UserCog class="size-3.5" /> Change role
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item class={menuItem} onSelect={() => askSetPassword(u.username)}>
+                        <LockKeyhole class="size-3.5" /> Set password
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item class={menuItem + " text-red-600"} onSelect={() => deleteUser(u.username)}>
+                        <Trash2 class="size-3.5" /> Delete user
+                      </DropdownMenu.Item>
+                    {/if}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            </div>
+          </li>
+        {:else}
+          <li class="px-4 py-8 text-center text-sm text-zinc-500">
+            {!usersLoaded ? "Loading people…" : query || roleFilter ? "No one matches." : "No people yet."}
+          </li>
+        {/each}
       {:else}
-        <li class="px-4 py-8 text-center text-sm text-zinc-500">
-          {#if usersLoaded}
-            <UserRoundX class="mx-auto mb-1 size-6 text-zinc-300" />
-            No users found
-          {:else}
-            Loading users…
-          {/if}
-        </li>
-      {/each}
+        {#each shown as k (k.id)}
+          <li class="{rowGrid} px-4 py-2.5 hover:bg-zinc-50">
+            <div class="flex min-w-0 items-center gap-3">
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600"><KeyRound class="size-4" /></span>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-medium text-zinc-900">{k.name}</div>
+                <div class="truncate font-mono text-xs text-zinc-500">{k.prefix}…</div>
+              </div>
+            </div>
+            <div class="justify-self-end md:justify-self-start"><RoleBadge role={k.role} /></div>
+            <div class="text-xs {stale(k.lastUsedAt, k.createdAt) ? 'text-amber-600' : 'text-zinc-600'}">
+              <span class="md:hidden">Last used&nbsp;</span>{k.lastUsedAt ? ago(k.lastUsedAt) : "never"}{stale(k.lastUsedAt, k.createdAt) ? " · unused 30d+" : ""}
+            </div>
+            <div class="hidden text-xs text-zinc-500 md:block">{ago(k.createdAt)}</div>
+            <div class="justify-self-end">
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" aria-label="Actions for key {k.name}">
+                  <Ellipsis class="size-4" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content class="z-50 min-w-44 rounded-md border border-zinc-200 bg-white py-1 shadow-md" align="end">
+                    <DropdownMenu.Item class={menuItem} onSelect={() => viewActivity(`key:${k.name}`)}>
+                      <History class="size-3.5" /> View activity
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item class={menuItem + " text-red-600"} onSelect={() => revokeKey(k)}>
+                      <Trash2 class="size-3.5" /> Revoke key
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            </div>
+          </li>
+        {:else}
+          <li class="px-4 py-8 text-center text-sm text-zinc-500">
+            {#if !keysLoaded}
+              Loading keys…
+            {:else if query || roleFilter}
+              No keys match.
+            {:else}
+              No API keys yet. Create one per agent or script, so each can be revoked on its own.
+            {/if}
+          </li>
+        {/each}
+      {/if}
     </ul>
   </div>
-
-  <!-- roles reference: a card on wide screens, a disclosure on phones -->
-  {#snippet roleList()}
-    {#each [["admin", "Full access: tables, columns, rows, import/export, users, API keys, branding."], ["editor", "Create, edit and delete rows in every table."], ["viewer", "Read-only: browse tables and rows, export."], ["builder", "Builds against the API without seeing data: table names, columns and docs only, never rows."]] as [r, text] (r)}
-      <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
-        <RoleBadge role={r} />
-        <p class="mt-1.5 text-xs leading-5 text-zinc-500">{text}</p>
-      </div>
-    {/each}
-  {/snippet}
-  <div class="hidden flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 lg:flex">
-    <div class="text-sm font-semibold">Roles</div>
-    {@render roleList()}
-  </div>
-  <details class="group rounded-lg border border-zinc-200 bg-white lg:hidden">
-    <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold">
-      What do the roles mean?
-      <ChevronDown class="size-4 text-zinc-500 transition-transform group-open:rotate-180" />
-    </summary>
-    <div class="flex flex-col gap-3 px-4 pb-4">{@render roleList()}</div>
-  </details>
-
-  <!-- API keys for machines: agents, scripts, cron jobs -->
-  <div class="rounded-lg border border-zinc-200 bg-white p-4 lg:col-span-3">
-    <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
-      <KeyRound class="size-4" /> API keys
-      <span class="basis-full text-xs font-normal text-zinc-500 sm:basis-auto">for agents &amp; scripts - browser apps use the human login instead</span>
-    </div>
-    <ul class="flex flex-col divide-y divide-zinc-100">
-      {#each keys as k (k.id)}
-        <li class="flex items-center gap-3 py-2">
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-medium">{k.name}</span>
-            <span class="block font-mono text-xs text-zinc-500">{k.prefix}… · created {ago(k.createdAt)} · used {ago(k.lastUsedAt)}</span>
-          </span>
-          <RoleBadge role={k.role} />
-          <button
-            class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-red-600"
-            title="Revoke key"
-            aria-label="Revoke key {k.name}"
-            onclick={() => revokeKey(k)}
-          ><Trash2 class="size-3.5" /></button>
-        </li>
-      {:else}
-        <li class="py-2 text-xs text-zinc-500">{keysLoaded ? "No keys yet - create one for each AI agent or script." : "Loading keys…"}</li>
-      {/each}
-    </ul>
-
-    <form onsubmit={createKey} class="mt-2 flex flex-wrap items-center gap-2">
-      <input
-        class="{inputCls} min-w-40 flex-1"
-        type="text"
-        placeholder="Key name (e.g. my-ai-agent)"
-        aria-label="Key name"
-        bind:value={keyName}
-        required
-      />
-      <Select.Root type="single" bind:value={keyRole}>
-        <Select.Trigger class="{selectTrigger} w-44" aria-label="Key role">
-          <span class="truncate">{keyRole}</span>
-          <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content class={selectContent}>
-            {#each ["builder", "viewer", "editor", "admin"] as r (r)}
-              <Select.Item
-                value={r}
-                class={selectItem}
-              >
-                <div class="font-medium">{r}</div>
-                <div class="text-xs text-zinc-500">{r === "builder" ? "schema and docs only, never rows" : r === "viewer" ? "read only" : r === "editor" ? "can edit data" : "full access"}</div>
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
-      <button
-        class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
-        disabled={keysBusy}
-      ><Plus class="size-3.5" /> {keysBusy ? "Creating…" : "Create key"}</button>
-    </form>
-
-    <p class="mt-2 text-xs text-zinc-500">
-      Keys are shown in full only once and stored hashed - revoke immediately if one leaks.
-    </p>
-  </div>
+  {#if tab === "keys"}
+    <p class="mt-2 text-xs text-zinc-500">Keys are shown in full only once and stored hashed - revoke immediately if one leaks.</p>
+  {/if}
 </div>
-</div>
+
+{#snippet roleSelect(value, setValue, label)}
+  <Select.Root type="single" {value} onValueChange={setValue}>
+    <Select.Trigger class="{selectTrigger} w-full" aria-label={label}>
+      <span class="truncate">{value}</span>
+      <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
+    </Select.Trigger>
+    <Select.Portal>
+      <Select.Content class={selectContent}>
+        {#each ROLES as r (r)}
+          <Select.Item value={r} class={selectItem}>
+            <div class="font-medium">{r}</div>
+            <div class="text-xs text-zinc-500">{roleShort[r]}</div>
+          </Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Portal>
+  </Select.Root>
+{/snippet}
 
 <Dialog.Root bind:open={addOpen}>
   <Dialog.Portal>
     <Dialog.Overlay class={dialogOverlay} />
-    <Dialog.Content class={dialogContent}>
+    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
       <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
-        <UserRoundPlus class="size-4" /> Add user
+        <UserRoundPlus class="size-4" /> Add person
       </Dialog.Title>
       <Dialog.Description class="mb-4 text-sm text-zinc-500">
-        A random password is generated - hand it over once, they change it on first sign-in.
+        For someone who signs in to an app built on {branding.name}, or an admin of this dashboard. Scripts and agents get an API key instead.
       </Dialog.Description>
       <form onsubmit={addUser} class="flex flex-col gap-3">
         <input class={inputCls} type="text" placeholder="Username" aria-label="Username" bind:value={username} required />
-        <Select.Root type="single" bind:value={role}>
-          <Select.Trigger class="{selectTrigger} w-full" aria-label="Role">
-            <span class="truncate">{role}</span>
-            <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
-          </Select.Trigger>
-          <Select.Portal>
-            <Select.Content class={selectContent}>
-              {#each roleItems as r (r.value)}
-                <Select.Item
-                  value={r.value}
-                  class={selectItem}
-                >
-                  <div class="font-medium">{r.value}</div>
-                  <div class="text-xs text-zinc-500">{roleDesc[r.value]}</div>
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Portal>
-        </Select.Root>
+        {@render roleSelect(role, (v) => (role = v), "Role")}
+        <p class="text-xs text-zinc-500">A random password is generated and shown once. They can change it by signing in at this site.</p>
         <div class="mt-1 flex justify-end gap-2">
-          <Dialog.Close
-            class="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50"
-          >Cancel</Dialog.Close>
-          <button
-            class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"
-            disabled={busy}
-          >{busy ? "Creating…" : "Create user"}</button>
+          <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
+          <button class={btnPrimary} disabled={busy}>{busy ? "Adding…" : "Add person"}</button>
+        </div>
+      </form>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
+
+<Dialog.Root bind:open={keyOpen}>
+  <Dialog.Portal>
+    <Dialog.Overlay class={dialogOverlay} />
+    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
+      <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
+        <KeyRound class="size-4" /> Create API key
+      </Dialog.Title>
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
+        For a script, agent or server. Never put a key in browser code - browser apps sign people in instead.
+      </Dialog.Description>
+      <form onsubmit={createKey} class="flex flex-col gap-3">
+        <input class={inputCls} type="text" placeholder="Key name (e.g. my-ai-agent)" aria-label="Key name" bind:value={keyName} required />
+        {@render roleSelect(keyRole, (v) => (keyRole = v), "Key role")}
+        <p class="text-xs text-zinc-500">builder is the default: an agent can build against the API without reading a single row.</p>
+        <div class="mt-1 flex justify-end gap-2">
+          <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
+          <button class={btnPrimary} disabled={keysBusy}>{keysBusy ? "Creating…" : "Create key"}</button>
         </div>
       </form>
     </Dialog.Content>
@@ -471,7 +555,7 @@
         <LockKeyhole class="size-4" /> {creds?.username}
       </Dialog.Title>
       <Dialog.Description class="mt-1 text-sm text-zinc-600">
-        Copy this password now - it is never shown again. The login file carries the URL too.
+        Copy this password now - it is never shown again. The login file has the username too.
       </Dialog.Description>
       {@render secretBlock(creds?.password)}
       <div class="mt-3 flex flex-wrap justify-end gap-2">
@@ -487,53 +571,6 @@
         <button class={btnPrimary} onclick={() => closeSecret(() => (credsOpen = false))}
         >{secretWarn && !secretSaved ? "Close anyway" : "Done"}</button>
       </div>
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
-
-<PromptDialog
-  bind:open={passOpen}
-  bind:value={passValue}
-  title={`Set password for ${passTarget}`}
-  label="Min 8 characters - changing it signs that user out everywhere."
-  password
-  minLength={8}
-  submitLabel="Set password"
-  onsubmit={(v) => setPassword(v)}
-/>
-
-<Dialog.Root bind:open={roleOpen}>
-  <Dialog.Portal>
-    <Dialog.Overlay class={dialogOverlay} />
-    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
-      <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
-        <UserCog class="size-4" /> Role for {roleTarget?.username}
-      </Dialog.Title>
-      <Dialog.Description class="mb-4 text-sm text-zinc-500">
-        Applies right away, including to sessions already signed in.
-      </Dialog.Description>
-      <form onsubmit={saveRole} class="flex flex-col gap-3">
-        <Select.Root type="single" bind:value={roleValue}>
-          <Select.Trigger class="{selectTrigger} w-full" aria-label="Role">
-            <span class="truncate">{roleValue}</span>
-            <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
-          </Select.Trigger>
-          <Select.Portal>
-            <Select.Content class={selectContent}>
-              {#each roleItems as r (r.value)}
-                <Select.Item value={r.value} class={selectItem}>
-                  <div class="font-medium">{r.value}</div>
-                  <div class="text-xs text-zinc-500">{roleDesc[r.value]}</div>
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Portal>
-        </Select.Root>
-        <div class="mt-1 flex justify-end gap-2">
-          <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
-          <button class={btnPrimary} disabled={roleBusy}>{roleBusy ? "Saving…" : "Change role"}</button>
-        </div>
-      </form>
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>
@@ -564,6 +601,39 @@
         <button class={btnPrimary} onclick={() => closeSecret(() => { newKeyOpen = false; newKey = null; })}
         >{secretWarn && !secretSaved ? "Close anyway" : "Done"}</button>
       </div>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
+
+<PromptDialog
+  bind:open={passOpen}
+  bind:value={passValue}
+  title={`Set password for ${passTarget}`}
+  label="Min 8 characters - changing it signs that user out everywhere."
+  password
+  minLength={8}
+  submitLabel="Set password"
+  onsubmit={(v) => setPassword(v)}
+/>
+
+<Dialog.Root bind:open={roleOpen}>
+  <Dialog.Portal>
+    <Dialog.Overlay class={dialogOverlay} />
+    <Dialog.Content class="{dialogContent} w-96 max-w-[calc(100vw-2rem)]">
+      <Dialog.Title class="mb-1 flex items-center gap-2 font-semibold">
+        <UserCog class="size-4" /> Role for {roleTarget?.username}
+      </Dialog.Title>
+      <Dialog.Description class="mb-4 text-sm text-zinc-500">
+        Applies right away, including to sessions already signed in.
+      </Dialog.Description>
+      <form onsubmit={saveRole} class="flex flex-col gap-3">
+        {@render roleSelect(roleValue, (v) => (roleValue = v), "Role")}
+        <p class="text-xs leading-5 text-zinc-500">{roleDesc[roleValue]}</p>
+        <div class="mt-1 flex justify-end gap-2">
+          <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
+          <button class={btnPrimary} disabled={roleBusy}>{roleBusy ? "Saving…" : "Change role"}</button>
+        </div>
+      </form>
     </Dialog.Content>
   </Dialog.Portal>
 </Dialog.Root>

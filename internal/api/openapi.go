@@ -125,7 +125,7 @@ func (sv *Server) validateAny(token string) (auth.User, error) {
 
 func openAPI() map[string]any {
 	strEnum := []string{"text", "number", "date", "datetime"}
-	roleEnum := []string{"admin", "editor", "viewer"}
+	roleEnum := []string{"admin", "editor", "viewer", "builder"}
 	keyRoleEnum := []string{"admin", "editor", "viewer", "builder"}
 
 	schemas := obj(
@@ -155,6 +155,10 @@ func openAPI() map[string]any {
 		"User", obj("type", "object", "properties", obj(
 			"username", obj("type", "string"),
 			"role", obj("type", "string", "enum", roleEnum),
+			"createdAt", obj("type", "string", "format", "date-time", "description", "absent for accounts created before it was recorded"),
+			"lastLoginAt", obj("type", "string", "format", "date-time", "description", "absent until the first sign-in"),
+			"failedLogins", obj("type", "integer", "description", "wrong passwords since the last successful sign-in"),
+			"lastFailedAt", obj("type", "string", "format", "date-time"),
 		)),
 		"ApiKeyInfo", obj("type", "object", "properties", obj(
 			"id", obj("type", "string"),
@@ -552,6 +556,7 @@ func openAPI() map[string]any {
 			"parameters", []any{
 				queryParam("table", "only entries for this table"),
 				queryParam("rowId", "only entries for this row"),
+				queryParam("user", "only entries made by this actor (a username, or key:<name> for an API key)"),
 				obj("name", "limit", "in", "query", "schema", obj("type", "integer", "default", 100, "maximum", 1000)),
 			},
 			"responses", merge(
@@ -576,6 +581,15 @@ func openAPI() map[string]any {
 				),
 			),
 		)),
+		"/api/me", obj("get", merge(op("Auth", "Who the caller is (any role, session or API key)"), obj(
+			"responses", merge(
+				response("200", "OK", obj("type", "object", "properties", obj(
+					"username", obj("type", "string"),
+					"role", obj("type", "string", "enum", roleEnum),
+				))),
+				refs("401", "Unauthorized"),
+			),
+		))),
 		"/api/me/password", obj("post", merge(op("Auth", "Change your own password (any role)"), obj(
 			"description", "Revokes every other session of the user; the calling session stays signed in.",
 			"requestBody", requestBody(obj(

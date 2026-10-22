@@ -26,14 +26,6 @@
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
-      // dashboard is admin-only: reject non-admin sessions politely
-      if (res.role !== "admin") {
-        try {
-          await api("/api/logout", { method: "POST", headers: { Authorization: "Bearer " + res.token } });
-        } catch {}
-        error = "This account is for API use only. It has no access to this dashboard.";
-        return;
-      }
       setSession(res);
     } catch (err) {
       error = err.message;

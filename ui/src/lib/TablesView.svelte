@@ -633,7 +633,7 @@
 <div class="mb-3 hidden flex-wrap items-center gap-2 md:flex">
   {#if tables.current}
     <h2 class="flex min-w-0 items-center gap-2.5 text-xl font-semibold tracking-tight text-zinc-900">
-      <TableIcon name={tables.current} class="size-7 text-sm" />
+      <TableIcon name={tables.current} class="size-7 rounded-md text-sm" />
       <span class="truncate">{tables.current}</span>
       <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 tabular-nums">{loading ? "…" : `${total.toLocaleString()} row${total === 1 ? "" : "s"}`}</span>
     </h2>

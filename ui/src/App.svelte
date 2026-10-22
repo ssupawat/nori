@@ -1,6 +1,6 @@
 <script>
   import { api } from "./lib/api.js";
-  import { auth, clearSession } from "./lib/auth.svelte.js";
+  import { auth, clearSession, setSession } from "./lib/auth.svelte.js";
   import { tables, refreshTables, openTable } from "./lib/tables.svelte.js";
   import { showToast } from "./lib/toast.svelte.js";
   import LogOut from "@lucide/svelte/icons/log-out";
@@ -31,32 +31,37 @@
   import ApiView from "./lib/ApiView.svelte";
   import AuditView from "./lib/AuditView.svelte";
   import SettingsView from "./lib/SettingsView.svelte";
+  import AccountView from "./lib/AccountView.svelte";
   import { applyFavicon } from "./lib/favicon.js";
 
   // The view and table are kept in the URL hash (#/tables/orders, #/audit);
-  // localStorage restores the last view when the hash is empty.
+  // localStorage restores the last view when the hash is empty. `sub` is the
+  // rest of the hash for the other views (#/access/keys, #/audit/user/kai).
   const VIEWS = ["dashboard", "tables", "api", "access", "audit", "settings"];
 
   function parseHash() {
     const [, v, ...rest] = location.hash.replace(/^#/, "").split("/");
     if (!VIEWS.includes(v)) return null;
-    return { view: v, table: v === "tables" && rest.length ? decodeURIComponent(rest.join("/")) : null };
+    if (v === "tables") return { view: v, table: rest.length ? decodeURIComponent(rest.join("/")) : null, sub: "" };
+    return { view: v, table: null, sub: rest.join("/") };
   }
 
   const initial = parseHash();
   if (initial?.table) openTable(initial.table);
   let view = $state(initial?.view ?? (VIEWS.includes(localStorage.getItem("nori-view")) ? localStorage.getItem("nori-view") : "dashboard"));
+  let sub = $state(initial?.sub ?? "");
   let drawerOpen = $state(false);
 
-  function hashFor(v, table) {
-    return v === "tables" && table ? `#/tables/${encodeURIComponent(table)}` : `#/${v}`;
+  function hashFor(v, table, s) {
+    if (v === "tables") return table ? `#/tables/${encodeURIComponent(table)}` : "#/tables";
+    return s ? `#/${v}/${s}` : `#/${v}`;
   }
 
   // state -> URL: a new history entry per navigation (first one replaces)
   let firstSync = true;
   $effect(() => {
     localStorage.setItem("nori-view", view);
-    const want = hashFor(view, tables.current);
+    const want = hashFor(view, tables.current, sub);
     if (location.hash === want) return;
     if (firstSync) history.replaceState(null, "", want);
     else history.pushState(null, "", want);
@@ -70,6 +75,7 @@
       if (!h) return;
       if (h.table && h.table !== tables.current) openTable(h.table);
       view = h.view;
+      sub = h.sub;
       drawerOpen = false;
     };
     window.addEventListener("popstate", onHash);
@@ -79,8 +85,8 @@
       window.removeEventListener("hashchange", onHash);
     };
   });
-  // the dashboard is admin-only; verify the stored session server-side on
-  // boot so a spoofed localStorage role cannot render the admin shell
+  // the dashboard is admin-only; the role comes from the server on boot, so
+  // a spoofed localStorage role cannot render the admin shell
   let verified = $state(false);
 
   // tab icon follows the brand (art mark or custom logo)
@@ -107,15 +113,14 @@
     refreshTables().catch((err) => showToast(err.message, "error"));
   });
 
-  // verify the claimed role against the server before rendering anything
+  // take the role from the server before rendering anything
   $effect(() => {
     if (!auth.token) return;
-    api("/api/users")
-      .then(() => (verified = true))
-      .catch((err) => {
-        if (err.status === 403) clearSession();
-        verified = true;
-      });
+    const token = auth.token;
+    api("/api/me")
+      .then((me) => setSession({ token, username: me.username, role: me.role }))
+      .catch(() => {})
+      .finally(() => (verified = true));
   });
 
   let newTableOpen = $state(false);
@@ -192,6 +197,7 @@
 
   function goto(v) {
     view = v;
+    sub = "";
     drawerOpen = false;
   }
 
@@ -277,18 +283,8 @@
     <p class="text-sm text-zinc-500">Loading…</p>
   </div>
 {:else if auth.role !== "admin"}
-  <!-- dashboard is admin-only; editor/viewer accounts are for API use -->
-  <div class="flex min-h-screen flex-col items-center justify-center gap-3 bg-zinc-50 p-4 text-center">
-    <h1 class="text-lg font-bold text-zinc-900">{branding.name}</h1>
-    <p class="max-w-sm text-sm text-zinc-500">
-      This account is for API use only. It has no access to this dashboard.
-      Frontends built on the {branding.name} API keep working as usual.
-    </p>
-    <button
-      class="mt-2 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-      onclick={signOut}
-    >Sign out</button>
-  </div>
+  <!-- the dashboard is admin-only; other accounts get their own account page -->
+  <AccountView onsignout={signOut} />
 {:else}
   <div
     class="flex h-screen overflow-hidden"
@@ -362,11 +358,11 @@
             {:else if view === "api"}
               <ApiView />
             {:else if view === "audit"}
-              <AuditView />
+              <AuditView {sub} onsub={(s) => (sub = s)} />
             {:else if view === "settings"}
               <SettingsView />
             {:else}
-              <AccessView />
+              <AccessView {sub} onsub={(s) => (sub = s)} />
             {/if}
           </div>
         {/key}

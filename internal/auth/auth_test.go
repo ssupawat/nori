@@ -373,3 +373,47 @@ func TestSetRoleKeepsOneAdmin(t *testing.T) {
 		t.Fatalf("demote one of two admins: %v", err)
 	}
 }
+
+func TestLoginTracking(t *testing.T) {
+	// Arrange: an admin and a viewer.
+	s := openTestAuth(t)
+	if _, err := s.EnsureAdmin("admin", "secretpw1"); err != nil {
+		t.Fatalf("ensure admin: %v", err)
+	}
+	if err := s.CreateUser("v", "longenough", Viewer); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	find := func() User {
+		users, err := s.ListUsers()
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		for _, u := range users {
+			if u.Username == "v" {
+				return u
+			}
+		}
+		t.Fatal("user v missing")
+		return User{}
+	}
+
+	// Assert: a new user has a creation time and no sign-ins yet.
+	if u := find(); u.CreatedAt == "" || u.LastLoginAt != "" || u.FailedLogins != 0 {
+		t.Fatalf("fresh user: %+v", u)
+	}
+
+	// Act + Assert: two wrong passwords are counted.
+	s.Login("v", "wrong-one")
+	s.Login("v", "wrong-two")
+	if u := find(); u.FailedLogins != 2 || u.LastFailedAt == "" {
+		t.Fatalf("after failures: %+v", u)
+	}
+
+	// Act + Assert: a successful sign-in records the time and resets the count.
+	if _, _, err := s.Login("v", "longenough"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if u := find(); u.LastLoginAt == "" || u.FailedLogins != 0 || u.LastFailedAt != "" {
+		t.Fatalf("after sign-in: %+v", u)
+	}
+}
