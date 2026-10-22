@@ -42,7 +42,11 @@
     for (const [path, count] of Object.entries(usage.byPath)) {
       const m = path.match(/\/api\/tables\/([^/]+)/);
       if (!m) continue;
-      perTable.set(m[1], (perTable.get(m[1]) ?? 0) + count);
+      let name = m[1];
+      try {
+        name = decodeURIComponent(name);
+      } catch {}
+      perTable.set(name, (perTable.get(name) ?? 0) + count);
     }
     let best = null;
     for (const [name, count] of perTable) {
@@ -86,7 +90,7 @@
   });
 </script>
 
-<div class="flex w-full max-w-5xl flex-col gap-4">
+<div class="flex w-full flex-col gap-4">
   <div class="flex flex-wrap items-end justify-between gap-2">
     <div>
       <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Dashboard</h2>
@@ -165,7 +169,7 @@
       <span class="text-xs text-zinc-500">Busiest table</span>
       {#if hottest}
         <span class="truncate text-2xl font-semibold">{hottest.name}</span>
-        <span class="text-xs text-zinc-500">{hottest.count.toLocaleString()} requests</span>
+        <span class="text-xs text-zinc-500">{hottest.count.toLocaleString()} requests{usage.tables.some((t) => t.name === hottest.name) ? "" : " · table deleted"}</span>
       {:else}
         <span class="mt-1 text-sm text-zinc-500">No API traffic yet</span>
       {/if}
@@ -173,7 +177,7 @@
     <div class="{tileCls} col-span-2 sm:col-span-1">
       <span class="text-xs text-zinc-500">Rows stored</span>
       <span class="text-2xl font-semibold tabular-nums">{usage ? totalRows.toLocaleString() : "…"}</span>
-      <span class="text-xs text-zinc-500">across {usage?.tables?.length ?? 0} tables</span>
+      <span class="text-xs text-zinc-500">across {usage.tables.length} table{usage.tables.length === 1 ? "" : "s"}</span>
     </div>
   </div>
 
@@ -223,12 +227,16 @@
             <!-- no fill below 1% -->
             <div class="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100" title="{t.rows.toLocaleString()} / {usage.maxRows.toLocaleString()} rows">
               {#if pct >= 1}
-                <div class="h-2 rounded-full {pct >= 75 ? 'bg-amber-500' : 'bg-brand'}" style="width: {pct}%"></div>
+                <div class="h-2 rounded-full {pct >= 100 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-brand'}" style="width: {pct}%"></div>
               {/if}
             </div>
-            {#if pct >= 75}
-              <p class="mt-1 flex items-center gap-1 text-xs text-amber-600">
-                <TriangleAlert class="size-3" /> Getting close to the cap - time to plan a migration. Export is in the table menu.
+            {#if pct >= 100}
+              <p class="mt-1.5 flex items-start gap-1.5 text-xs text-red-600">
+                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Full - new rows and imports into this table are rejected. Export is in the table menu.
+              </p>
+            {:else if pct >= 75}
+              <p class="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600">
+                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Getting close to the cap - time to plan a migration. Export is in the table menu.
               </p>
             {/if}
           </div>

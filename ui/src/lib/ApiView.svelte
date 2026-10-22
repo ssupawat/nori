@@ -24,7 +24,7 @@
     "flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-xs hover:bg-zinc-50 disabled:opacity-50";
 </script>
 
-<div class="w-full max-w-5xl">
+<div class="w-full">
   <div class="mb-3">
     <h2 class="text-xl font-semibold tracking-tight text-zinc-900">API</h2>
     <p class="mt-0.5 text-sm text-zinc-500">Reference for agents and scripts - keys live on the Access page, traffic and server health on the Dashboard</p>
@@ -74,7 +74,7 @@
     </ol>
     <!-- full handbook, no inner scroller -->
     <div class="rounded-lg bg-zinc-50 p-4 text-sm text-zinc-700">
-      {#if llms}{@html renderMarkdown(llms)}{:else}<p class="text-zinc-500">Loading…</p>{/if}
+      <div class="max-w-4xl">{#if llms}{@html renderMarkdown(llms)}{:else}<p class="text-zinc-500">Loading…</p>{/if}</div>
     </div>
   </div>
 </div>

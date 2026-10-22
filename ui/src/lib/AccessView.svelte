@@ -235,7 +235,7 @@
     "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm data-highlighted:bg-zinc-100";
 </script>
 
-<div class="w-full max-w-5xl">
+<div class="w-full">
   <div class="mb-3 flex items-start gap-3">
     <div class="min-w-0 flex-1">
       <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Access</h2>
