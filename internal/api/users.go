@@ -119,29 +119,51 @@ func (sv *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// updateUser changes a user's password. Revoking that user's sessions is
-// part of the operation, so a rotated credential stops working everywhere.
+// updateUser changes a user's password and/or role. Revoking that user's
+// sessions is part of a password change, so a rotated credential stops
+// working everywhere; a role change applies to live sessions at once.
 func (sv *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var body struct {
 		Password string `json:"password"`
+		Role     string `json:"role"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Password == "" {
-		writeError(w, http.StatusBadRequest, `body must be {"password": "new password"}`)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || (body.Password == "" && body.Role == "") {
+		writeError(w, http.StatusBadRequest, `body must be {"password": "new password"} and/or {"role": "admin|editor|viewer|builder"}`)
 		return
 	}
-	if err := sv.auth.SetPassword(name, body.Password); err != nil {
+	if body.Role != "" && name == currentUser(r).Username {
+		writeError(w, http.StatusBadRequest, "cannot change your own role")
+		return
+	}
+	userErr := func(err error) {
 		switch {
 		case errors.Is(err, auth.ErrNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, auth.ErrInvalidRole):
+			writeError(w, http.StatusBadRequest, `role must be "admin", "editor", "viewer" or "builder"`)
+		case errors.Is(err, auth.ErrLastAdmin):
+			writeError(w, http.StatusBadRequest, "cannot demote the last admin")
 		case errors.Is(err, auth.ErrInvalidInput):
 			writeError(w, http.StatusBadRequest, err.Error())
 		default:
 			serverError(w, err)
 		}
-		return
 	}
-	sv.auditEvent(r, "set_password", "users", name, nil)
+	if body.Role != "" {
+		if err := sv.auth.SetRole(name, auth.Role(body.Role)); err != nil {
+			userErr(err)
+			return
+		}
+		sv.auditEvent(r, "set_role", "users", name, map[string]string{"role": body.Role})
+	}
+	if body.Password != "" {
+		if err := sv.auth.SetPassword(name, body.Password); err != nil {
+			userErr(err)
+			return
+		}
+		sv.auditEvent(r, "set_password", "users", name, nil)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

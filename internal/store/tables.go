@@ -318,7 +318,8 @@ func (s *Store) RenameTable(oldName, newName string) error {
 }
 
 // copyDocs snapshots a table's documents, applying the optional column
-// rename (oldCol -> newCol) to every document. Ids and seq are preserved.
+// rename (oldCol -> newCol) to every document; an empty newCol with a
+// non-empty oldCol drops that column instead. Ids and seq are preserved.
 func (s *Store) copyDocs(table string, colRename [2]string) ([]*d.Document, error) {
 	entries, err := s.allRows(table)
 	if err != nil {
@@ -334,8 +335,10 @@ func (s *Store) copyDocs(table string, colRename [2]string) ([]*d.Document, erro
 			if k == "id" {
 				continue
 			}
-			if colRename[1] != "" && k == colRename[0] {
-				doc.Set(colRename[1], v)
+			if colRename[0] != "" && k == colRename[0] {
+				if colRename[1] != "" {
+					doc.Set(colRename[1], v)
+				}
 				continue
 			}
 			doc.Set(k, v)
@@ -392,6 +395,38 @@ func (s *Store) RenameColumn(table, oldCol, newCol string) error {
 		}
 	}
 	return s.stageAndSwap(table, renamed, docs, "")
+}
+
+// DeleteColumn drops a column and its values from every row, rewriting the
+// table in a single batch like RenameColumn. Row ids are preserved. The
+// last column cannot be dropped: a table always has at least one.
+func (s *Store) DeleteColumn(table, column string) error {
+	s.tablesMu.Lock()
+	defer s.tablesMu.Unlock()
+	if err := s.checkTable(table); err != nil {
+		return err
+	}
+	columns, err := s.GetColumnsMeta(table)
+	if err != nil {
+		return err
+	}
+	if !containsColumn(columns, column) {
+		return ErrNotFound
+	}
+	if len(columns) == 1 {
+		return invalidf("cannot delete the last column of %q", table)
+	}
+	docs, err := s.copyDocs(table, [2]string{column, ""})
+	if err != nil {
+		return err
+	}
+	kept := make([]Column, 0, len(columns)-1)
+	for _, c := range columns {
+		if c.Name != column {
+			kept = append(kept, c)
+		}
+	}
+	return s.stageAndSwap(table, kept, docs, "")
 }
 
 // stageAndSwap rewrites a table's documents: the rewritten copy lands in a

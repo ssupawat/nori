@@ -132,6 +132,7 @@ func (sv *Server) Routes() http.Handler {
 		})
 		r.With(sv.requireAdmin).Post("/columns", sv.addColumn)
 		r.With(sv.requireAdmin).Patch("/columns/{col}", sv.renameColumn)
+		r.With(sv.requireAdmin).Delete("/columns/{col}", sv.deleteColumn)
 		r.With(sv.requireAdmin).Patch("/", sv.renameTable)
 		r.With(sv.requireAdmin).Delete("/", sv.deleteTable)
 	})

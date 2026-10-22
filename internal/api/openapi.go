@@ -340,6 +340,12 @@ func openAPI() map[string]any {
 					errResponse("409", "A column with the new name already exists"),
 				),
 			)),
+			"delete", merge(op("Tables", "Drop a column and its values from every row (admin)"), obj(
+				"responses", merge(
+					response("200", "OK", sref("ColumnList")),
+					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
+				),
+			)),
 		),
 		"/api/tables/{t}/rows", obj(
 			"parameters", tableParam,
@@ -451,15 +457,17 @@ func openAPI() map[string]any {
 				"responses", merge(plain("200", "OK"),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden")),
 			)),
-			"patch", merge(op("Users", "Change a user's password (revokes that user's sessions)"), obj(
+			"patch", merge(op("Users", "Change a user's password (revokes that user's sessions) and/or role (admin)"), obj(
 				"security", []any{obj("bearerAuth", []any{})},
 				"requestBody", requestBody(obj(
 					"type", "object",
-					"required", []string{"password"},
-					"properties", obj("password", obj("type", "string", "minLength", 8)),
+					"properties", obj(
+						"password", obj("type", "string", "minLength", 8),
+						"role", obj("type", "string", "enum", []string{"admin", "editor", "viewer", "builder"}, "description", "applies to live sessions at once; the last admin cannot be demoted, nor your own account"),
+					),
 				)),
 				"responses", merge(
-					plain("200", "Password changed; all sessions of that user are revoked"),
+					plain("200", "Updated; a password change revokes all sessions of that user"),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
 				),
 			)),
