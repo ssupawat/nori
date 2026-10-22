@@ -126,6 +126,57 @@ func sanitize(name string) string {
 	return clean
 }
 
+// WriteStreaming renders one table as an .xlsx file, receiving rows in
+// pages so the whole table never has to live in memory at once.
+func WriteStreaming(w io.Writer, sheetName string, columns []string, pages func(yield func([][]string) error) error) error {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	const defaultSheet = "Sheet1"
+	sheet := sanitize(sheetName)
+	if _, err := f.NewSheet(sheet); err != nil {
+		return err
+	}
+	if err := f.DeleteSheet(defaultSheet); err != nil {
+		return err
+	}
+
+	sw, err := f.NewStreamWriter(sheet)
+	if err != nil {
+		return err
+	}
+	header := make([]any, len(columns))
+	for i, col := range columns {
+		header[i] = col
+	}
+	if err := sw.SetRow("A1", header); err != nil {
+		return err
+	}
+
+	rowNum := 1
+	err = pages(func(page [][]string) error {
+		for _, row := range page {
+			rowNum++
+			cell, _ := excelize.CoordinatesToCellName(1, rowNum)
+			vals := make([]any, len(row))
+			for i, v := range row {
+				vals[i] = v
+			}
+			if err := sw.SetRow(cell, vals); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if err := sw.Flush(); err != nil {
+		return err
+	}
+	return f.Write(w)
+}
+
 // Write renders one table as an .xlsx file.
 func Write(w io.Writer, sheetName string, columns []string, rows [][]string) error {
 	f := excelize.NewFile()

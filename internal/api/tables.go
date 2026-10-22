@@ -174,14 +174,42 @@ func (sv *Server) exportTable(w http.ResponseWriter, r *http.Request) {
 	if !sv.checkTable(w, table) {
 		return
 	}
-	columns, rows, err := sv.store.AllRows(table)
+	columns, err := sv.store.GetColumns(table)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.xlsx"`, table))
-	if err := sheetimport.Write(w, table, columns, rows); err != nil {
+	pages := func(yield func([][]string) error) error {
+		// 1000 == store's max page size; paged so a full-table export
+		// never holds the whole table in memory.
+		const pageSize = 1000
+		for offset := 0; ; offset += pageSize {
+			rows, _, err := sv.store.GetRows(table, store.RowQuery{Limit: pageSize, Offset: offset})
+			if err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				return nil
+			}
+			page := make([][]string, len(rows))
+			for i, row := range rows {
+				cells := make([]string, len(columns))
+				for j, c := range columns {
+					cells[j] = row[c]
+				}
+				page[i] = cells
+			}
+			if err := yield(page); err != nil {
+				return err
+			}
+			if len(rows) < pageSize {
+				return nil
+			}
+		}
+	}
+	if err := sheetimport.WriteStreaming(w, table, columns, pages); err != nil {
 		serverError(w, err)
 		return
 	}

@@ -637,28 +637,6 @@ func (s *Store) insertAllFrom(table string, rows []map[string]string, seqBase in
 	return s.db.Insert(table, docs...)
 }
 
-// AllRows returns every row of a table with column order preserved, for
-// export. Cells are ordered by the table's columns.
-func (s *Store) AllRows(table string) ([]string, [][]string, error) {
-	columns, err := s.GetColumns(table)
-	if err != nil {
-		return nil, nil, err
-	}
-	entries, err := s.rowEntries(table)
-	if err != nil {
-		return nil, nil, err
-	}
-	out := make([][]string, 0, len(entries))
-	for _, e := range entries {
-		cells := make([]string, len(columns))
-		for i, c := range columns {
-			cells[i] = e.row[c]
-		}
-		out = append(out, cells)
-	}
-	return columns, out, nil
-}
-
 func (s *Store) CountRows(table string) (int, error) {
 	entries, err := s.rowEntries(table)
 	if err != nil {

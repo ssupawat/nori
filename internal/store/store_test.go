@@ -274,28 +274,6 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
-func TestExportAllRows(t *testing.T) {
-	// Arrange: a two-by-two table.
-	s := openTestStore(t)
-	if err := s.ReplaceTable("t", cols("a", "b"), []map[string]string{
-		{"a": "1", "b": "2"},
-		{"a": "3", "b": "4"},
-	}); err != nil {
-		t.Fatalf("replace: %v", err)
-	}
-
-	// Act
-	columns, rows, err := s.AllRows("t")
-	if err != nil {
-		t.Fatalf("all rows: %v", err)
-	}
-
-	// Assert
-	if len(columns) != 2 || len(rows) != 2 || rows[0][0] != "1" || rows[1][1] != "4" {
-		t.Fatalf("unexpected export data: %v %v", columns, rows)
-	}
-}
-
 func TestColumnTypes(t *testing.T) {
 	// Arrange: a table with typed columns and mixed raw values.
 	s := openTestStore(t)
