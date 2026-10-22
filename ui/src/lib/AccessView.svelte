@@ -1,6 +1,7 @@
 <script>
   import { Dialog, Select, DropdownMenu } from "bits-ui";
-  import Trash from "@lucide/svelte/icons/trash";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
   import UserRoundPlus from "@lucide/svelte/icons/user-round-plus";
   import UserRoundX from "@lucide/svelte/icons/user-round-x";
   import KeyRound from "@lucide/svelte/icons/key-round";
@@ -293,10 +294,10 @@
                     <UserCog class="size-3.5" /> Change role
                   </DropdownMenu.Item>
                   <DropdownMenu.Item class={menuItem} onSelect={() => askSetPassword(u.username)}>
-                    <KeyRound class="size-3.5" /> Set password
+                    <LockKeyhole class="size-3.5" /> Set password
                   </DropdownMenu.Item>
                   <DropdownMenu.Item class={menuItem + " text-red-600"} onSelect={() => deleteUser(u.username)}>
-                    <Trash class="size-3.5" /> Delete user
+                    <Trash2 class="size-3.5" /> Delete user
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
@@ -356,7 +357,7 @@
             title="Revoke key"
             aria-label="Revoke key {k.name}"
             onclick={() => revokeKey(k)}
-          ><Trash class="size-3.5" /></button>
+          ><Trash2 class="size-3.5" /></button>
         </li>
       {:else}
         <li class="py-2 text-xs text-zinc-500">{keysLoaded ? "No keys yet - create one for each AI agent or script." : "Loading keys…"}</li>
@@ -469,7 +470,7 @@
       interactOutsideBehavior="ignore"
     >
       <Dialog.Title class="flex items-center gap-2 font-semibold">
-        <KeyRound class="size-4" /> {creds?.username}
+        <LockKeyhole class="size-4" /> {creds?.username}
       </Dialog.Title>
       <Dialog.Description class="mt-1 text-sm text-zinc-600">
         Copy this password now - it is never shown again. The login file carries the URL too.

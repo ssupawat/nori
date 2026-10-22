@@ -6,7 +6,7 @@
   import { tables } from "./tables.svelte.js";
   import { showToast } from "./toast.svelte.js";
   import { ago } from "./fmt.js";
-  import History from "@lucide/svelte/icons/history";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import X from "@lucide/svelte/icons/x";
 
   let entries = $state([]);
@@ -103,7 +103,7 @@
       class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
       onclick={load}
       disabled={loading}
-    ><History class="size-3.5" /> {loading ? "Loading…" : "Refresh"}</button>
+    ><RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" /> {loading ? "Loading…" : "Refresh"}</button>
   </div>
 
   <!-- two layers: the static frame insets the scroll window, so rows sliced

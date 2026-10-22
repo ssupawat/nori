@@ -6,13 +6,13 @@
   import Activity from "@lucide/svelte/icons/activity";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import DatabaseBackup from "@lucide/svelte/icons/database-backup";
-  import Download from "@lucide/svelte/icons/download";
   import FileSpreadsheet from "@lucide/svelte/icons/file-spreadsheet";
   import Plus from "@lucide/svelte/icons/plus";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import Upload from "@lucide/svelte/icons/upload";
 
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
 
   let { ongoto, onimport, onnewtable, onsample, sampleBusy = false } = $props();
 
@@ -146,7 +146,7 @@
             title="Generated workbook: Products, Customers, Orders"
             disabled={sampleBusy}
             onclick={() => onsample?.()}
-          ><Download class="size-4 {sampleBusy ? 'animate-pulse' : ''}" /> {sampleBusy ? "Loading sample…" : "Try sample data"}</button>
+          ><Sparkles class="size-4 {sampleBusy ? 'animate-pulse' : ''}" /> {sampleBusy ? "Loading sample…" : "Try sample data"}</button>
           <button
             class="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm hover:bg-zinc-50"
             onclick={() => onnewtable?.()}

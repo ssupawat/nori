@@ -2,7 +2,7 @@
   import { Checkbox, ContextMenu, DropdownMenu } from "bits-ui";
   import Check from "@lucide/svelte/icons/check";
   import Minus from "@lucide/svelte/icons/minus";
-  import Copy from "@lucide/svelte/icons/copy";
+  import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Inbox from "@lucide/svelte/icons/inbox";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -245,7 +245,7 @@
 
 {#snippet rowMenuItems(row, Item)}
   <Item class={itemCls} onSelect={() => onduplicate(row)}>
-    <Copy class="size-3.5" /> Duplicate row
+    <CopyPlus class="size-3.5" /> Duplicate row
   </Item>
   <Item class={itemCls + " text-red-600"} onSelect={() => ondelete(row)}>
     <Trash2 class="size-3.5" /> Delete row

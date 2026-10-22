@@ -4,7 +4,7 @@
   import Upload from "@lucide/svelte/icons/upload";
   import Download from "@lucide/svelte/icons/download";
   import Plus from "@lucide/svelte/icons/plus";
-  import Trash from "@lucide/svelte/icons/trash";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Search from "@lucide/svelte/icons/search";
@@ -312,13 +312,13 @@
     }
   }
 
+  // opens at once; the last-24h traffic count is filled in when it arrives
   async function askRenameTable() {
     const name = tables.current;
+    const base = `Apps and agents calling /api/tables/${name} stop working until they switch to the new name.`;
+    askPrompt("Rename table", "New table name", name, renameTable, { submitLabel: "Rename", warning: base });
     const traffic = await apiTrafficNote(name);
-    askPrompt("Rename table", "New table name", name, renameTable, {
-      submitLabel: "Rename",
-      warning: `Apps and agents calling /api/tables/${name} stop working until they switch to the new name.${traffic}`,
-    });
+    if (traffic && promptOpen && promptTitle === "Rename table") promptWarning = base + traffic;
   }
 
   // throws on failure: the dialog stays open with the error inline
@@ -642,7 +642,7 @@
   {#if canEdit()}
     {#if selected.size > 0}
       <button class={btnCls} onclick={deleteSelected} disabled={deleting}
-      ><Trash class="size-3.5" /> {deleting ? "Deleting…" : `Delete ${selected.size.toLocaleString()} row${selected.size === 1 ? "" : "s"}`}</button>
+      ><Trash2 class="size-3.5" /> {deleting ? "Deleting…" : `Delete ${selected.size.toLocaleString()} row${selected.size === 1 ? "" : "s"}`}</button>
     {/if}
     {#if tables.current}
       <button class={btnCls} onclick={addRow}><Plus class="size-3.5" /> Add row</button>
@@ -681,7 +681,7 @@
           </DropdownMenu.Item>
           {#if auth.role === "admin"}
             <DropdownMenu.Item class={menuItemDanger} onSelect={deleteTable}>
-              <Trash class="size-3.5" /> Delete table…
+              <Trash2 class="size-3.5" /> Delete table…
             </DropdownMenu.Item>
           {/if}
         {/if}
@@ -842,7 +842,7 @@
           class="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           onclick={deleteSelected}
           disabled={deleting}
-        ><Trash class="size-3.5" /> {deleting ? "Deleting…" : "Delete"}</button>
+        ><Trash2 class="size-3.5" /> {deleting ? "Deleting…" : "Delete"}</button>
       </div>
     {:else}
       <button
