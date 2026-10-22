@@ -70,6 +70,8 @@ type Store struct {
 	tablesMu  sync.RWMutex
 	colCache  map[string][]Column
 	rowCache  map[string][]rowDoc // decoded rows in seq order
+	scanMu    sync.Mutex
+	scanLocks map[string]*sync.Mutex // one full-table scan at a time, per table
 	lastSeq   int64               // guarded by mu; keeps InsertRow sequences strictly increasing
 	dateOrder atomic.Value        // string: OrderDMY or OrderMDY
 	beYear    atomic.Value        // bool: parsed years >= 2400 are Buddhist Era
@@ -118,7 +120,7 @@ func Open(dir string) (*Store, error) {
 			return nil, err
 		}
 	}
-	s := &Store{db: db, dir: dir, colCache: map[string][]Column{}, rowCache: map[string][]rowDoc{}}
+	s := &Store{db: db, dir: dir, colCache: map[string][]Column{}, rowCache: map[string][]rowDoc{}, scanLocks: map[string]*sync.Mutex{}}
 	s.setDateOrder(OrderDMY)
 	s.beYear.Store(true)
 	if vals, ok, err := s.GetSetting("dates"); err == nil && ok {
@@ -258,6 +260,21 @@ func (s *Store) rowEntries(table string) ([]rowDoc, error) {
 	if ok {
 		return entries, nil
 	}
+
+	// One full-table scan per table at a time. A timed-out request abandons
+	// its response but its scan keeps running; concurrent cold scans of one
+	// table would stack their decoded copies into an OOM. The double-check
+	// lets waiters reuse the scan that filled the cache before them.
+	unlock := s.lockScan(table)
+	defer unlock()
+
+	s.mu.RLock()
+	entries, ok = s.rowCache[table]
+	s.mu.RUnlock()
+	if ok {
+		return entries, nil
+	}
+
 	entries, err := s.allRows(table)
 	if err != nil {
 		return nil, err
@@ -266,11 +283,26 @@ func (s *Store) rowEntries(table string) ([]rowDoc, error) {
 	if len(entries) <= MaxTableRows && len(entries) <= MaxCachedRowsTotal {
 		needed := cacheTableBytes(entries)
 		if needed <= MaxCacheBytes {
+			s.mu.Lock()
 			s.evictCache(len(entries), needed)
 			s.rowCache[table] = entries
+			s.mu.Unlock()
 		}
 	}
 	return entries, nil
+}
+
+// lockScan serializes full-table scans of one table. The mutex lives in a
+// map so distinct tables never wait on each other.
+func (s *Store) lockScan(table string) func() {
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+	if s.scanLocks[table] == nil {
+		s.scanLocks[table] = &sync.Mutex{}
+	}
+	mu := s.scanLocks[table]
+	mu.Lock()
+	return mu.Unlock
 }
 
 // PauseRewrites blocks whole-table rewrites until the returned func is
