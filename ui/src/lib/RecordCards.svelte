@@ -2,7 +2,7 @@
   import { Checkbox, Dialog } from "bits-ui";
   import Check from "@lucide/svelte/icons/check";
   import Minus from "@lucide/svelte/icons/minus";
-  import Copy from "@lucide/svelte/icons/copy";
+  import CopyPlus from "@lucide/svelte/icons/copy-plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Inbox from "@lucide/svelte/icons/inbox";
   import Pencil from "@lucide/svelte/icons/pencil";
@@ -250,7 +250,7 @@
                 sheetOpen = false;
                 onduplicate(sheetRow);
               }}
-            ><Copy class="size-3.5" /> Duplicate</button>
+            ><CopyPlus class="size-3.5" /> Duplicate</button>
             <button
               class="ml-auto flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
               onclick={() => {

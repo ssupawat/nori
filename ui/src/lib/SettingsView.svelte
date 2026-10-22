@@ -3,10 +3,10 @@
   import { branding, loadBranding } from "./branding.svelte.js";
   import { showToast } from "./toast.svelte.js";
   import { askConfirm } from "./confirm.svelte.js";
-  import KeyRound from "@lucide/svelte/icons/key-round";
+  import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
+  import Palette from "@lucide/svelte/icons/palette";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
-  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { Select } from "bits-ui";
   import { inputCls, selectTrigger, selectContent, selectItem } from "./cls.js";
   import GenArt from "./GenArt.svelte";
@@ -138,7 +138,7 @@
   <div class="flex flex-col gap-4 lg:grid lg:grid-cols-2">
   <form onsubmit={save} class="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4">
     <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold">
-      <SlidersHorizontal class="size-4" /> Branding
+      <Palette class="size-4" /> Branding
       <span class="basis-full text-xs font-normal text-zinc-500 sm:basis-auto">white-label the dashboard under your own brand</span>
     </div>
 
@@ -198,7 +198,7 @@
     <div class="flex flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50/60 p-6">
       <div class="flex flex-col items-center gap-2 text-center">
         {#if logoUrl && !logoBroken}
-          <img src={logoUrl} alt="logo" class="size-10 rounded-lg border border-zinc-200 object-cover" onerror={() => (logoBroken = true)} />
+          <img src={logoUrl} alt="logo" class="size-10 rounded-lg border border-zinc-200 object-contain" onerror={() => (logoBroken = true)} />
         {:else}
           {#if logoUrl}
             <span class="text-xs text-red-600">Logo URL doesn't load - showing the art mark</span>
@@ -221,7 +221,7 @@
   </div>
 
   <div class="mt-4 flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4">
-    <div class="flex items-center gap-2 text-sm font-semibold"><KeyRound class="size-4" /> Account</div>
+    <div class="flex items-center gap-2 text-sm font-semibold"><LockKeyhole class="size-4" /> Account</div>
     <form onsubmit={changePassword} class="flex flex-col gap-2">
       <div class="flex flex-wrap gap-2">
         <input class="{inputCls} min-w-52 flex-1" type={revealPw ? "text" : "password"} aria-label="Current password" placeholder="Current password" bind:value={currentPw} autocomplete="current-password" required />
