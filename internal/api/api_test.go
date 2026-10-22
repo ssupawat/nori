@@ -1634,3 +1634,43 @@ func TestDeleteColumnDropsValues(t *testing.T) {
 		t.Fatalf("last column should be 400, got %d", res.StatusCode)
 	}
 }
+
+func TestMeAndAuditActorFilter(t *testing.T) {
+	// Arrange: an admin, a viewer, and a key that writes a row.
+	env := newTestEnv(t)
+	adminTok := env.login("admin", "adminpw1")
+	env.do("POST", "/api/users", adminTok, strings.NewReader(`{"username":"vee","password":"veepass99","role":"viewer"}`))
+	env.do("POST", "/api/tables", adminTok, strings.NewReader(`{"name":"T","columns":[{"name":"a"}]}`))
+	_, body := env.do("POST", "/api/keys", adminTok, strings.NewReader(`{"name":"bot","role":"editor"}`))
+	var key struct {
+		Key string `json:"key"`
+	}
+	json.Unmarshal(body, &key)
+	env.do("POST", "/api/tables/T/rows", key.Key, strings.NewReader(`{"a":"x"}`))
+
+	// Act + Assert: /api/me answers for a session and for a key.
+	res, body := env.do("GET", "/api/me", env.login("vee", "veepass99"), nil)
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"username":"vee"`) || !strings.Contains(string(body), `"role":"viewer"`) {
+		t.Fatalf("me (session): %d %s", res.StatusCode, body)
+	}
+	if res, body = env.do("GET", "/api/me", key.Key, nil); res.StatusCode != 200 || !strings.Contains(string(body), `"username":"key:bot"`) {
+		t.Fatalf("me (key): %d %s", res.StatusCode, body)
+	}
+
+	// Act + Assert: the audit trail filtered by actor holds only that actor.
+	env.srv.audit.flush()
+	res, body = env.do("GET", "/api/audit?user=key:bot", adminTok, nil)
+	var entries []struct {
+		User   string `json:"user"`
+		Action string `json:"action"`
+	}
+	json.Unmarshal(body, &entries)
+	if res.StatusCode != 200 || len(entries) == 0 {
+		t.Fatalf("audit by key: %d %s", res.StatusCode, body)
+	}
+	for _, e := range entries {
+		if e.User != "key:bot" {
+			t.Fatalf("filter leaked %+v", e)
+		}
+	}
+}

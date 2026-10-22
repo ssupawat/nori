@@ -61,6 +61,11 @@ func (r Role) Valid() bool {
 type User struct {
 	Username string `json:"username"`
 	Role     Role   `json:"role"`
+	// set on listings only (ListUsers); RFC3339, empty when unknown
+	CreatedAt    string `json:"createdAt,omitempty"`
+	LastLoginAt  string `json:"lastLoginAt,omitempty"`
+	FailedLogins int    `json:"failedLogins,omitempty"` // wrong passwords since the last sign-in
+	LastFailedAt string `json:"lastFailedAt,omitempty"`
 }
 
 type Service struct {
@@ -127,10 +132,22 @@ func (s *Service) Login(username, password string) (token string, user User, err
 		return "", User{}, ErrInvalidCredentials
 	}
 	hash, _ := doc.Get("hash").(string)
+	now := time.Now().UTC().Format(time.RFC3339)
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+		failed := intOf(doc.Get("failedLogins")) + 1
+		_ = s.db.UpdateById(usersCollection, doc.ObjectId(), func(doc *d.Document) *d.Document {
+			doc.Set("failedLogins", failed)
+			doc.Set("lastFailedAt", now)
+			return doc
+		})
 		time.Sleep(loginDelay)
 		return "", User{}, ErrInvalidCredentials
 	}
+	_ = s.db.UpdateById(usersCollection, doc.ObjectId(), func(doc *d.Document) *d.Document {
+		doc.Set("lastLoginAt", now)
+		doc.Set("failedLogins", 0)
+		return doc
+	})
 	s.purgeExpiredSessions()
 
 	token, err = newToken()
@@ -238,6 +255,7 @@ func (s *Service) CreateUser(username, password string, role Role) error {
 	doc.Set("username", username)
 	doc.Set("hash", string(hash))
 	doc.Set("role", string(role))
+	doc.Set("createdAt", time.Now().UTC().Format(time.RFC3339))
 	_, err = s.db.InsertOne(usersCollection, doc)
 	return err
 }
@@ -373,7 +391,17 @@ func (s *Service) ListUsers() ([]User, error) {
 	for _, doc := range docs {
 		username, _ := doc.Get("username").(string)
 		role, _ := doc.Get("role").(string)
-		users = append(users, User{Username: username, Role: Role(role)})
+		u := User{
+			Username:     username,
+			Role:         Role(role),
+			CreatedAt:    stringOr(doc.Get("createdAt")),
+			LastLoginAt:  stringOr(doc.Get("lastLoginAt")),
+			FailedLogins: intOf(doc.Get("failedLogins")),
+		}
+		if u.FailedLogins > 0 {
+			u.LastFailedAt = stringOr(doc.Get("lastFailedAt"))
+		}
+		users = append(users, u)
 	}
 	// storage order is document-id order, not creation order - sort by
 	// privilege (admin first) then username so the listing is deterministic
@@ -598,6 +626,20 @@ func (s *Service) ValidateAPIKey(full string) (User, error) {
 		})
 	}
 	return User{Username: KeyIdentityPrefix + stringOr(doc.Get("name")), Role: role}, nil
+}
+
+// intOf reads a stored counter; clover hands numbers back as int64 or
+// float64 depending on the path they took
+func intOf(v interface{}) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return 0
 }
 
 func stringOr(v interface{}) string {

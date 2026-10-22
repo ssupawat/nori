@@ -114,6 +114,7 @@ func (sv *Server) Routes() http.Handler {
 	r.With(sv.requireAdmin).Get("/settings/dates", sv.getDatesOrder)
 	r.With(sv.requireAdmin).Put("/settings/dates", sv.updateDatesOrder)
 	r.With(loginRateLimit).Post("/login", sv.login)
+	r.With(sv.requireAny).Get("/me", sv.me)
 	r.With(sv.requireAny).Post("/me/password", sv.changeOwnPassword)
 
 	r.With(sv.requireAny).Post("/logout", sv.logout)
@@ -320,6 +321,12 @@ func (sv *Server) login(w http.ResponseWriter, r *http.Request) {
 		"username": user.Username,
 		"role":     string(user.Role),
 	})
+}
+
+// me reports who the caller is (any role, session or API key).
+func (sv *Server) me(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	writeJSON(w, http.StatusOK, map[string]string{"username": u.Username, "role": string(u.Role)})
 }
 
 func (sv *Server) logout(w http.ResponseWriter, r *http.Request) {

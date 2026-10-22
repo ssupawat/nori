@@ -45,9 +45,11 @@ DELETE /api/tables/{t}                          drop table                 admin
 
 POST   /api/import             multipart: file=.xlsx, mode=replace|append   admin
 GET    /api/sample.xlsx        generated sample workbook (admin) - import it to try the loop without a file
-GET    /api/users · POST /api/users (no password = generated, returned once) ·
+GET    /api/users (each with createdAt, lastLoginAt, failedLogins since the last sign-in) ·
+       POST /api/users (no password = generated, returned once) ·
        PATCH /api/users/{name} {"password"} and/or {"role"} · DELETE /api/users/{name}   admin
        (a password change revokes that user's sessions; a role change applies at once; the last admin can't be demoted)
+GET    /api/me            {"username","role"} - who the caller is, any role
 POST   /api/me/password   {"currentPassword","password"} - change own password, any role (other sessions revoked)
 GET    /api/keys · POST /api/keys · DELETE /api/keys/{id}                  admin
 GET    /api/usage              {requests24h, byPath, byHour, tables:[{name,rows}], maxRows}   admin
@@ -56,7 +58,8 @@ GET    /api/usage              {requests24h, byPath, byHour, tables:[{name,rows}
 GET    /api/status             {version, uptimeSeconds, dataDir, dataBytes,           admin
                                diskFreeBytes, backup{dir, everySeconds, lastAt, lastPath, lastError}}
 POST   /api/backup             trigger a dump now, returns {path} (disabled without -backup-dir)   admin
-GET    /api/audit?table=&rowId=&limit=   who changed what, newest first   admin
+GET    /api/audit?table=&rowId=&user=&limit=   who changed what, newest first   admin
+                               (user = the actor: a username, or key:<name>)
                                actions: create_row, update_row, delete_row, create_table,
                                import, login, login_failed (with client IP), ...; writes made with an
                                API key carry "key:<name>" (key names are unique)
