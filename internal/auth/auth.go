@@ -314,9 +314,7 @@ func (s *Service) ChangeOwnPassword(username, current, newPassword, keepToken st
 	return s.db.Delete(q)
 }
 
-// SetRole changes a user's role. Roles are read per request, so it applies
-// to the user's existing sessions right away. The last admin cannot be
-// demoted, the same rule DeleteUser enforces.
+// SetRole changes a user's role. The last admin cannot be demoted.
 func (s *Service) SetRole(username string, role Role) error {
 	if !role.Valid() {
 		return ErrInvalidRole

@@ -103,10 +103,10 @@ const STYLES = [
   },
 ];
 
-// Draw one artwork onto a 2d context (bg: the paper color, white unless a
-// dark surface asks otherwise). `variant` forces one of the four
+// Draw one artwork onto a 2d context. `variant` forces one of the four
 // styles (flow / waves / rings / mosaic); otherwise the seed picks one.
 // `hue` pins the palette to a base hue; otherwise the seed randomizes it.
+// `bg` is the paper color.
 export function drawArt(ctx, W, H, seed, variant = null, hue = null, bg = "#fff") {
   const rng = mulberry32(hash(seed));
   const style = variant ?? Math.floor(rng() * STYLES.length);

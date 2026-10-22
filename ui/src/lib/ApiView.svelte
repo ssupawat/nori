@@ -37,8 +37,6 @@
         <span class="basis-full text-xs font-normal text-zinc-500 sm:basis-auto">llms.txt and OpenAPI 3.1, written for agents and scripts</span>
       </span>
       <span class="flex items-center gap-1.5">
-        <!-- disabled until loaded: copying the empty placeholder would
-             report success with nothing on the clipboard -->
         <CopyButton
           class={btnCls}
           iconClass="size-3"
@@ -57,7 +55,6 @@
       </span>
     </div>
     {#snippet urlChip(url, title)}
-      <!-- a URL as one unit: truncates instead of wrapping mid-token -->
       <span class="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-zinc-100 py-0.5 pr-0.5 pl-2 align-middle">
         <code class="min-w-0 truncate font-mono text-xs text-zinc-700">{url}</code>
         <CopyButton
@@ -75,7 +72,7 @@
         3. Point the agent at {@render urlChip(`${origin}/llms.txt`, "Copy llms.txt URL")} or {@render urlChip(`${origin}/openapi.json`, "Copy OpenAPI URL")}
       </li>
     </ol>
-    <!-- full handbook, rendered (headings, lists), no inner scroller -->
+    <!-- full handbook, no inner scroller -->
     <div class="rounded-lg bg-zinc-50 p-4 text-sm text-zinc-700">
       {#if llms}{@html renderMarkdown(llms)}{:else}<p class="text-zinc-500">Loading…</p>{/if}
     </div>

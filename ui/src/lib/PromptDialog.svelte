@@ -6,10 +6,8 @@
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
 
-  // onsubmit(value, colType) may return a promise: the dialog stays open
-  // (input kept, error shown inline) until it resolves, and closes only on
-  // success. Throw to report a failure; return false to stay open quietly
-  // (the user backed out of a follow-up question).
+  // onsubmit(value, colType) may return a promise; the dialog closes when it
+  // resolves. Throw to show an error inline; return false to stay open.
   let {
     open = $bindable(false),
     title = "",

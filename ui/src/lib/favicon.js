@@ -2,13 +2,11 @@
 // the deterministic art mark in mosaic style (the grid family stays
 // legible at tab size). Re-applied whenever branding changes.
 //
-// The tab icon is clipped to a rounded square, matching the rounded-md
-// marks in the dashboard (CSS rounding can't reach a favicon). The
-// apple-touch-icon stays square and full-bleed: iOS applies its own mask.
+// The tab icon is clipped to a rounded square; the apple-touch-icon stays square.
 import { drawArt, hueFromHex } from "./art.js";
 
 const SIZE = 64;
-const RADIUS = 14; // ~22%, the same ratio as rounded-md on the size-6 marks
+const RADIUS = 14; // at 64px
 const TOUCH = 180;
 
 function setLink(rel, href, type = "image/png") {
@@ -57,14 +55,13 @@ export function applyFavicon(branding) {
     artMark(branding);
     return;
   }
-  // round the logo too, when the image host allows reading it back
-  // (CORS); otherwise use it as is. A logo that fails to load falls back
-  // to the art mark rather than a broken tab icon.
+  // A logo is rounded when CORS allows reading it, used as-is otherwise,
+  // and replaced by the art mark if it fails to load.
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
     if (my !== pending) return;
-    // contain inside a white square, like the login page shows it
+    // contained in a white square
     const draw = (ctx, s) => {
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, s, s);
@@ -81,8 +78,7 @@ export function applyFavicon(branding) {
       setLink("apple-touch-icon", branding.logoUrl, "");
     }
   };
-  // a CORS refusal also lands here: load it once more without CORS - if
-  // that works, the logo is fine and is used unrounded
+  // retry without CORS: if it loads, use the URL as-is
   img.onerror = () => {
     if (my !== pending) return;
     const plain = new Image();

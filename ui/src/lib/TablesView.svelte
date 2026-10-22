@@ -34,7 +34,7 @@
   let { onimport, ongoto } = $props();
 
   const PAGE_SIZE = 50;
-  // "select all matching" stops here: deletes run one request per row
+  // upper bound for "select all matching"
   const MAX_SELECT_ALL = 10000;
 
   const menuItem =
@@ -48,8 +48,7 @@
   let columns = $state([]);
   let types = $state([]);
   let total = $state(0);
-  // searchText is what the box shows (both boxes share it); q is the
-  // debounced value the query runs on - clearing a chip clears both
+  // searchText is the input value (shared by both boxes); q is the debounced query
   let searchText = $state("");
   let q = $state("");
   let sort = $state("");
@@ -64,14 +63,12 @@
   let allMatching = $state(false);
   let selectingAll = $state(false);
 
-  // a freshly added row stays a draft until something is typed into it;
-  // left empty (Esc, click away, sheet closed) it is removed again
+  // a row added by Add row is removed again if left empty
   let draftId = null;
   let gridEditing = $state(false);
   let sheetEditing = $state(false);
 
-  // save indicator: cell edits apply instantly in the UI, this says when
-  // the server has them
+  // save indicator for cell edits
   let pendingSaves = $state(0);
   let saveState = $state(""); // "" | saving | saved | error
   let saveTimer;
@@ -83,8 +80,8 @@
   let searchTimer;
 
   // every table is an API resource; the strip under the toolbar keeps that
-  // visible where the data lives. The curl carries a placeholder, never the
-  // admin's own session token: snippets get pasted into chats and tickets.
+  // visible where the data lives, not only on the API page. The curl uses a
+  // $NORI_API_KEY placeholder.
   const curlText = $derived(
     `curl "${location.origin}/api/tables/${encodeURIComponent(tables.current ?? "")}/rows?limit=10" -H "Authorization: Bearer $NORI_API_KEY"`
   );
@@ -111,8 +108,8 @@
     return params;
   }
 
-  // background: a quiet refresh (focus, timer) - keeps the selection and
-  // the invalid-cell mark, and doesn't toast on failure
+  // background: a quiet refresh that keeps the selection and the invalid-cell
+  // mark and doesn't toast
   async function loadRows({ background = false } = {}) {
     if (!background) {
       selected.clear();
@@ -160,8 +157,7 @@
     void page;
     const name = tables.current;
     if (name !== lastTable) {
-      // a different table: show "Loading…", not the previous table's rows
-      // or a false "No rows yet"
+      // a different table: clear the rows and show Loading…
       lastTable = name;
       loading = true;
       rows = [];
@@ -179,8 +175,7 @@
     loadRows();
   });
 
-  // other people (and agents) edit too: refresh quietly when the tab comes
-  // back into view and every 30s while visible - never mid-edit
+  // quiet refresh on tab focus and every 30s while visible, skipped mid-edit
   function backgroundRefresh() {
     if (document.visibilityState !== "visible") return;
     if (gridEditing || sheetEditing || pendingSaves > 0 || deleting || promptOpen) return;
@@ -256,7 +251,7 @@
     }
   }
 
-  // a draft row the user left without typing anything is removed again
+  // removes the draft row if it is still empty
   async function checkDraft() {
     if (!draftId) return;
     const row = rows.find((r) => r.id === draftId);
@@ -302,7 +297,7 @@
     promptOpen = true;
   }
 
-  // renames change the API contract: say how much traffic would break
+  // last-24h API traffic for a table, as a sentence for the rename warning
   async function apiTrafficNote(table) {
     try {
       const usage = await api("/api/usage");
@@ -317,7 +312,7 @@
     }
   }
 
-  // opens at once; the last-24h traffic count is filled in when it arrives
+  // the traffic count is filled in when it arrives
   async function askRenameTable() {
     const name = tables.current;
     const base = `Apps and agents calling /api/tables/${name} stop working until they switch to the new name.`;
@@ -326,7 +321,7 @@
     if (traffic && promptOpen && promptTitle === "Rename table") promptWarning = base + traffic;
   }
 
-  // throws on failure: the dialog stays open with the error inline
+  // throws on failure
   async function renameTable(name) {
     await api(`/api/tables/${encodeURIComponent(tables.current)}`, {
       method: "PATCH",
@@ -491,7 +486,7 @@
 
   const allOnPage = $derived(rows.length > 0 && rows.every((r) => selected.has(r.id)));
 
-  // Gmail-style: after "select all on this page", offer every matching row
+  // select every matching row, not only this page
   async function selectAllMatching() {
     selectingAll = true;
     try {
@@ -519,8 +514,7 @@
     allMatching = false;
   }
 
-  // a few requests at a time, counting what actually went through, so a
-  // partial failure says how many rows were removed
+  // a few requests at a time; counts the rows actually deleted
   async function deleteSelected() {
     const ids = [...selected];
     const n = ids.length;
@@ -579,7 +573,7 @@
     }
   }
 
-  // the most destructive action in the app: type the name to confirm
+  // type the name to confirm
   async function deleteTable() {
     const name = tables.current;
     const ok = await askConfirm(
@@ -635,8 +629,7 @@
   ><CircleHelp class="size-4" /></button>
 {/snippet}
 
-<!-- desktop: the page title (table + row count) with its actions, then
-     the search row -->
+<!-- desktop: title row, then search row -->
 <div class="mb-3 hidden flex-wrap items-center gap-2 md:flex">
   {#if tables.current}
     <h2 class="flex min-w-0 items-center gap-2.5 text-xl font-semibold tracking-tight text-zinc-900">
@@ -720,8 +713,7 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- Mobile: table picker (the bottom bar has one Tables tab, not one tab
-     per table), then search + overflow menu -->
+<!-- Mobile: table picker, then search + overflow menu -->
 {#if tables.list.length > 0}
   <div class="mb-2 flex items-center gap-2 md:hidden">
     <DropdownMenu.Root>

@@ -423,7 +423,6 @@ function hueFromHex(hex){
 var bg=document.getElementById("bg");
 var brandColor="#18181b";
 function paintFavicon(){
-  // rounded like the in-app marks (CSS can't round a favicon)
   var c=document.createElement("canvas");c.width=64;c.height=64;
   var fx=c.getContext("2d");fx.beginPath();fx.roundRect(0,0,64,64,14);fx.clip();
   drawArt(fx,64,64,"nori",3,hueFromHex(brandColor));

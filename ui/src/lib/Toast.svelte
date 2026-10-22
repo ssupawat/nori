@@ -6,9 +6,7 @@
   import { toasts, dismissToast } from "./toast.svelte.js";
 </script>
 
-<!-- the live regions stay mounted so screen readers announce new text;
-     bottom-20 on phones keeps toasts clear of the bottom tab bar, and on
-     wider screens they sit bottom-right, clear of the table's pager -->
+<!-- live regions stay mounted; bottom-20 on phones, bottom-right from md -->
 <div class="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 md:right-6 md:bottom-6 md:left-auto md:items-end md:px-0">
   <div class="contents" role="status" aria-live="polite">
     {#each toasts.filter((t) => t.kind !== "error") as t (t.id)}

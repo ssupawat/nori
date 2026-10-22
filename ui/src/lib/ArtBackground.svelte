@@ -15,7 +15,7 @@
     canvas.height = window.innerHeight;
     const ctx = canvas.getContext("2d");
     drawArt(ctx, canvas.width, canvas.height, branding.name, hash(branding.name) % 3, hueFromHex(branding.color));
-    // wash toward the page color: light in light mode, dark in dark mode
+    // wash toward the page color
     ctx.fillStyle = dark?.matches ? "rgba(12,12,14,0.93)" : "rgba(255,255,255,0.92)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }

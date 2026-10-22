@@ -34,11 +34,8 @@
   let confirmPw = $state("");
   let revealPw = $state(false);
   let busyPw = $state(false);
-  // a typo in a new password would lock the admin out (other sessions are
-  // signed out too), so it is typed twice
   const pwMismatch = $derived(confirmPw !== "" && confirmPw !== newPw);
 
-  // accent must be #rrggbb: anything else silently breaks the buttons
   const colorValid = $derived(/^#[0-9a-f]{6}$/i.test(color));
   let logoBroken = $state(false);
   $effect(() => {
@@ -266,7 +263,6 @@
           </Select.Portal>
         </Select.Root>
       </div>
-      <!-- inside the form: Save stores both settings together -->
       <label class="basis-full flex items-center gap-2 text-sm">
         <input type="checkbox" class="size-4 accent-zinc-900" bind:checked={beYear} />
         <span>Buddhist Era years (<span class="font-mono text-xs">พ.ศ.</span>) - read years ≥ 2400 as พ.ศ. and convert to CE (2567 → 2024)</span>

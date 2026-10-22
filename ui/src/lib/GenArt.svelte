@@ -11,7 +11,7 @@
   let canvas;
   const hue = $derived(hueFromHex(color ?? branding.color));
 
-  // dark paper in dark mode: a white tile (or the white login panel) glares
+  // dark paper in dark mode
   $effect(() => {
     drawArt(canvas.getContext("2d"), canvas.width, canvas.height, seed, variant, hue, scheme.dark ? "#18181b" : "#fff");
   });

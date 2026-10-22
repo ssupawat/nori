@@ -1,4 +1,4 @@
-// Reactive OS color scheme, for canvas art that can't use CSS variables.
+// Reactive OS color scheme.
 const query = window.matchMedia?.("(prefers-color-scheme: dark)");
 
 export const scheme = $state({ dark: !!query?.matches });

@@ -11,8 +11,6 @@
 
   let fileInput;
   let file = $state(null);
-  // append is the safe default: replace drops tables and every edit made
-  // since the last import
   let mode = $state("append");
   let open = $state(false);
   let busy = $state(false);
