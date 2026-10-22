@@ -11,7 +11,8 @@ Run one binary, sign in as admin, import an .xlsx - every sheet becomes a table 
 ## Quick start
 
 ```sh
-go build -o nori .        # or download a binary from GitHub Releases
+(cd ui && npm ci && npm run build)   # builds the dashboard (Node 22)
+go build -o nori .                   # or download a binary from GitHub Releases
 ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 ```
 
