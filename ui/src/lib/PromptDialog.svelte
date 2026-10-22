@@ -21,6 +21,8 @@
     minLength = 0,
     submitLabel = "Save",
     warning = "",
+    // optional destructive side action: { label, run } - closes the dialog
+    danger = null,
     onsubmit,
   } = $props();
 
@@ -89,7 +91,7 @@
         </div>
         {#if withType}
           <Select.Root type="single" bind:value={colType}>
-            <Select.Trigger class="{selectTrigger}" aria-label="Column type">
+            <Select.Trigger class="{selectTrigger} w-full" aria-label="Column type">
               <span class="truncate">{colType}</span>
               <ChevronDown class="size-3.5 shrink-0 text-zinc-500" />
             </Select.Trigger>
@@ -114,7 +116,17 @@
         {#if error}
           <p class="text-sm text-red-600" role="alert">{error}</p>
         {/if}
-        <div class="flex justify-end gap-2">
+        <div class="flex items-center justify-end gap-2">
+          {#if danger}
+            <button
+              type="button"
+              class="mr-auto rounded-lg px-2 py-1.5 text-sm text-red-600 hover:bg-red-50"
+              onclick={() => {
+                open = false;
+                danger.run();
+              }}
+            >{danger.label}</button>
+          {/if}
           <Dialog.Close class={btnSecondary}>Cancel</Dialog.Close>
           <button class={btnPrimary} disabled={busy}>{busy ? "Saving…" : submitLabel}</button>
         </div>

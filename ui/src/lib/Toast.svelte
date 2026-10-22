@@ -7,8 +7,9 @@
 </script>
 
 <!-- the live regions stay mounted so screen readers announce new text;
-     bottom-20 on phones keeps toasts clear of the bottom tab bar -->
-<div class="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6">
+     bottom-20 on phones keeps toasts clear of the bottom tab bar, and on
+     wider screens they sit bottom-right, clear of the table's pager -->
+<div class="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 md:right-6 md:bottom-6 md:left-auto md:items-end md:px-0">
   <div class="contents" role="status" aria-live="polite">
     {#each toasts.filter((t) => t.kind !== "error") as t (t.id)}
       {@render toast(t)}
@@ -24,7 +25,7 @@
 {#snippet toast(t)}
   <div
     transition:fly={{ y: 8, duration: 160 }}
-    class="pointer-events-auto flex w-max max-w-[90vw] items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg {t.kind === 'error' ? 'bg-red-600 text-white' : 'bg-brand text-brand-on'}"
+    class="pointer-events-auto flex w-max max-w-[90vw] items-center gap-2 rounded-lg px-4 py-2.5 text-sm shadow-lg {t.kind === 'error' ? 'bg-red-600 text-[#fff]' : 'bg-brand text-brand-on'}"
   >
     {#if t.kind === "error"}
       <CircleAlert class="size-4 shrink-0" />

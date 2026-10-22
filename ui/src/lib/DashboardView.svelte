@@ -86,11 +86,11 @@
   });
 </script>
 
-<div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
-  <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
+<div class="flex w-full max-w-5xl flex-col gap-4">
+  <div class="flex flex-wrap items-end justify-between gap-2">
     <div>
-      <h2 class="text-sm font-semibold">Dashboard</h2>
-      <p class="flex items-center gap-1.5 text-xs text-zinc-500">
+      <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Dashboard</h2>
+      <p class="mt-0.5 flex items-center gap-1.5 text-sm text-zinc-500">
         Traffic, capacity, and server health
         <button
           class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50"
@@ -104,16 +104,17 @@
     {#if status}
       <!-- server metadata as a status line, not a strip: the full paths
            stay in GET /api/status, this keeps the glanceable tail -->
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500" title="version {status.version} - data {bytes(status.dataBytes)} in {status.dataDir}{status.diskFreeBytes > 0 ? `, ${bytes(status.diskFreeBytes)} disk free` : ''}">
-        <span class="font-mono text-zinc-500">{status.version}</span>
-        <span>up {duration(status.uptimeSeconds)}</span>
-        <span class="tabular-nums">{bytes(status.dataBytes)}</span>
+      <!-- each value carries its label: "dev · 3s · 32 KB" alone was cryptic -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500" title="data in {status.dataDir}{status.diskFreeBytes > 0 ? `, ${bytes(status.diskFreeBytes)} disk free` : ''}">
+        <span>version <span class="font-medium text-zinc-700">{status.version}</span></span>
+        <span>uptime <span class="font-medium text-zinc-700">{duration(status.uptimeSeconds)}</span></span>
+        <span>data <span class="font-medium text-zinc-700 tabular-nums">{bytes(status.dataBytes)}</span></span>
         {#if status.backup}
           <span>
-            {status.backup.lastAt ? `last dump ${ago(status.backup.lastAt)}` : "no dump yet"}{#if status.backup.lastError}<span class="text-red-600"> - failed: {status.backup.lastError}</span>{/if}
+            backups <span class="font-medium text-zinc-700">{status.backup.lastAt ? `last ${ago(status.backup.lastAt)}` : "no dump yet"}</span>{#if status.backup.lastError}<span class="text-red-600"> - failed: {status.backup.lastError}</span>{/if}
           </span>
         {:else}
-          <span class="text-amber-600">Backups off</span>
+          <span class="cursor-help text-amber-600" title="Scheduled backups are off - start nori with -backup-dir <dir> to turn them on">backups off</span>
         {/if}
         <button
           class="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 hover:bg-zinc-50 disabled:opacity-50"
@@ -155,8 +156,9 @@
       </div>
     </div>
   {:else if usage}
-    <!-- KPI tiles: uniform, one glance each -->
-    <div class="flex flex-col gap-4 sm:grid sm:grid-cols-3">
+    <!-- KPI tiles: uniform, one glance each; two columns on phones so the
+         chart isn't pushed below the fold -->
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
     <div class={tileCls}>
       <span class="text-xs text-zinc-500">Requests, last 24h</span>
       <span class="text-2xl font-semibold tabular-nums">{usage.requests24h.toLocaleString()}</span>
@@ -167,10 +169,10 @@
         <span class="truncate text-2xl font-semibold">{hottest.name}</span>
         <span class="text-xs text-zinc-500">{hottest.count.toLocaleString()} requests</span>
       {:else}
-        <span class="text-2xl font-semibold text-zinc-300">-</span>
+        <span class="mt-1 text-sm text-zinc-500">No API traffic yet</span>
       {/if}
     </div>
-    <div class={tileCls}>
+    <div class="{tileCls} col-span-2 sm:col-span-1">
       <span class="text-xs text-zinc-500">Rows stored</span>
       <span class="text-2xl font-semibold tabular-nums">{usage ? totalRows.toLocaleString() : "…"}</span>
       <span class="text-xs text-zinc-500">across {usage?.tables?.length ?? 0} tables</span>
@@ -178,18 +180,28 @@
   </div>
 
   <div class="flex flex-col gap-4 lg:grid lg:grid-cols-3">
-    <div class="{sectionCls} lg:col-span-2">
-      <div class="mb-3 text-sm font-semibold">Requests per hour, last 24h</div>
+    <!-- the chart fills its card (no empty band below), empty hours are a
+         faint baseline instead of black stubs, bars a softer brand tint -->
+    <div class="{sectionCls} flex flex-col lg:col-span-2">
+      <div class="mb-3 flex items-baseline justify-between gap-2">
+        <span class="text-sm font-semibold">Requests per hour</span>
+        {#if usage?.byHour}
+          <span class="text-xs text-zinc-500 tabular-nums">peak {Math.max(...usage.byHour).toLocaleString()}/h</span>
+        {/if}
+      </div>
       {#if usage?.byHour}
         {@const max = Math.max(...usage.byHour, 1)}
-        <div class="flex h-20 items-end gap-[4px]" title="oldest left, current hour right">
+        <div class="flex min-h-24 flex-1 items-end gap-[3px] border-b border-zinc-200">
           {#each usage.byHour as n, i (i)}
             <div
-              class="min-w-1 flex-1 rounded-t-sm bg-brand"
-              style="height: {n === 0 ? 3 : Math.max(4, Math.round((n / max) * 80))}px"
-              title="{n} requests"
+              class="min-w-1 flex-1 rounded-t-sm {n === 0 ? '' : 'bg-brand opacity-75 hover:opacity-100'}"
+              style="height: {n === 0 ? 0 : Math.max(4, (n / max) * 100)}%"
+              title="{n} request{n === 1 ? '' : 's'}, {24 - i === 1 ? 'this hour' : `${24 - i - 1}h ago`}"
             ></div>
           {/each}
+        </div>
+        <div class="mt-1 flex justify-between text-[11px] text-zinc-500">
+          <span>24h ago</span><span>12h ago</span><span>now</span>
         </div>
       {:else}
         <p class="text-xs text-zinc-500">Loading…</p>
@@ -197,7 +209,10 @@
     </div>
 
     <div class="{sectionCls}">
-      <div class="mb-3 text-sm font-semibold">Capacity</div>
+      <div class="mb-3 flex items-baseline justify-between gap-2">
+        <span class="text-sm font-semibold">Capacity</span>
+        <span class="text-xs text-zinc-500 tabular-nums">of {usage.maxRows.toLocaleString()} rows / table</span>
+      </div>
       <!-- inner scroll window inset from the card padding: sliced bars stay
            off the border -->
       <div class="p-1">
@@ -205,12 +220,15 @@
         {#each usage?.tables ?? [] as t (t.name)}
           {@const pct = Math.min(100, (t.rows / usage.maxRows) * 100)}
           <div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="font-medium">{t.name}</span>
-              <span class="tabular-nums text-zinc-500">{t.rows.toLocaleString()} / {usage.maxRows.toLocaleString()} rows</span>
+            <div class="flex items-center justify-between gap-2 text-xs">
+              <span class="min-w-0 truncate font-medium">{t.name}</span>
+              <span class="shrink-0 tabular-nums text-zinc-500">{t.rows.toLocaleString()} rows · {pct < 1 ? "<1%" : `${Math.round(pct)}%`}</span>
             </div>
-            <div class="mt-2 h-2 rounded bg-zinc-100">
-              <div class="h-2 rounded bg-brand" style="width: {pct}%"></div>
+            <!-- below 1% there is no fill: a 1px sliver read as a glitch -->
+            <div class="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100" title="{t.rows.toLocaleString()} / {usage.maxRows.toLocaleString()} rows">
+              {#if pct >= 1}
+                <div class="h-2 rounded-full {pct >= 75 ? 'bg-amber-500' : 'bg-brand'}" style="width: {pct}%"></div>
+              {/if}
             </div>
             {#if pct >= 75}
               <p class="mt-1 flex items-center gap-1 text-xs text-amber-600">

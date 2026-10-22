@@ -236,18 +236,18 @@
     "flex cursor-pointer items-center gap-2 px-3 py-2 text-sm data-highlighted:bg-zinc-100";
 </script>
 
-<div class="mx-auto w-full max-w-3xl">
+<div class="w-full max-w-5xl">
   <div class="mb-3 flex items-start gap-3">
     <div class="min-w-0 flex-1">
-      <h2 class="text-sm font-semibold">Access</h2>
-      <p class="text-xs text-zinc-500">Human accounts and API keys - who can sign in, and what machines can do</p>
+      <h2 class="text-xl font-semibold tracking-tight text-zinc-900">Access</h2>
+      <p class="mt-0.5 text-sm text-zinc-500">Human accounts and API keys - who can sign in, and what machines can do</p>
       <div class="mt-1.5 flex flex-wrap gap-1.5">
         <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{users.length} user{users.length === 1 ? "" : "s"}</span>
         <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{keys.length} key{keys.length === 1 ? "" : "s"}</span>
         {#each ["admin", "editor", "viewer", "builder"] as r (r)}
           {@const n = users.filter((u) => u.role === r).length}
           {#if n > 0}
-            <span class="rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500">{n} {r}</span>
+            <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600">{n} {r}{n === 1 ? "" : "s"}</span>
           {/if}
         {/each}
       </div>
@@ -260,7 +260,9 @@
     {/if}
   </div>
 
-<div class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-stretch">
+<!-- items-start: the user list is as tall as its users, not stretched to
+     the Roles column (one user used to sit in a big empty box) -->
+<div class="flex flex-col gap-4 lg:grid lg:grid-cols-3 lg:items-start">
   <div class="overflow-hidden rounded-lg border border-zinc-200 bg-white lg:col-span-2">
     <ul class="divide-y divide-zinc-200">
       {#each users as u (u.username)}
@@ -317,26 +319,28 @@
     </ul>
   </div>
 
-  <!-- roles reference: helps pick the right role when adding someone -->
-  <div class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+  <!-- roles reference: helps pick the right role when adding someone. A
+       card beside the users on wide screens; folded on phones, where four
+       cards stood between the users and the API keys -->
+  {#snippet roleList()}
+    {#each [["admin", "Full access: tables, columns, rows, import/export, users, API keys, branding."], ["editor", "Create, edit and delete rows in every table."], ["viewer", "Read-only: browse tables and rows, export."], ["builder", "Builds against the API without seeing data: table names, columns and docs only, never rows."]] as [r, text] (r)}
+      <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
+        <RoleBadge role={r} />
+        <p class="mt-1.5 text-xs leading-5 text-zinc-500">{text}</p>
+      </div>
+    {/each}
+  {/snippet}
+  <div class="hidden flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 lg:flex">
     <div class="text-sm font-semibold">Roles</div>
-    <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
-      <RoleBadge role="admin" />
-      <p class="mt-1.5 text-xs leading-5 text-zinc-500">Full access: tables, columns, rows, import/export, users, API keys, branding.</p>
-    </div>
-    <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
-      <RoleBadge role="editor" />
-      <p class="mt-1.5 text-xs leading-5 text-zinc-500">Create, edit and delete rows in every table.</p>
-    </div>
-    <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
-      <RoleBadge role="viewer" />
-      <p class="mt-1.5 text-xs leading-5 text-zinc-500">Read-only: browse tables and rows, export.</p>
-    </div>
-    <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 p-3">
-      <RoleBadge role="builder" />
-      <p class="mt-1.5 text-xs leading-5 text-zinc-500">Builds against the API without seeing data: table names, columns and docs only, never rows.</p>
-    </div>
+    {@render roleList()}
   </div>
+  <details class="group rounded-lg border border-zinc-200 bg-white lg:hidden">
+    <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold">
+      What do the roles mean?
+      <ChevronDown class="size-4 text-zinc-500 transition-transform group-open:rotate-180" />
+    </summary>
+    <div class="flex flex-col gap-3 px-4 pb-4">{@render roleList()}</div>
+  </details>
 
   <!-- API keys for machines: agents, scripts, cron jobs -->
   <div class="rounded-lg border border-zinc-200 bg-white p-4 lg:col-span-3">

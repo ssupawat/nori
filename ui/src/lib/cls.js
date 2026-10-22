@@ -3,8 +3,10 @@
 // Focus: outlines are replaced by a visible ring, never removed outright.
 const focusRing = "focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus:border-zinc-500";
 
+// no width here: callers add w-full / w-44 (a built-in w-full would win
+// over theirs, since it sorts later in the generated CSS)
 export const selectTrigger =
-  "flex w-full items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 " + focusRing;
+  "flex items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 " + focusRing;
 
 // compact variant for tight rows (e.g. column editor)
 export const selectTriggerSm =
@@ -25,7 +27,7 @@ export const btnPrimary =
 export const btnSecondary =
   "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50";
 export const btnDanger =
-  "rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-[#fff] hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50";
 
 // modal backdrop and the centered dialog frame; callers add their own
 // width and scroll classes on top

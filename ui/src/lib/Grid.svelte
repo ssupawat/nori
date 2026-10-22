@@ -241,6 +241,23 @@
   }
 
   const allOnPage = $derived(rows.length > 0 && rows.every((r) => selected.has(r.id)));
+
+  // right-edge fade while columns are hidden past the edge
+  let scroller = $state(null);
+  let moreRight = $state(false);
+  function updateFade() {
+    if (!scroller) return;
+    moreRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+  }
+  $effect(() => {
+    void rows;
+    void columns;
+    if (!scroller) return;
+    const ro = new ResizeObserver(updateFade);
+    ro.observe(scroller);
+    updateFade();
+    return () => ro.disconnect();
+  });
 </script>
 
 {#snippet rowMenuItems(row, Item)}
@@ -253,9 +270,17 @@
 {/snippet}
 
 <!-- flex-1 min-h-0: fill the remaining page height exactly (pagination sits
-     right below), and scroll internally instead of leaving dead space below. -->
-<div class="hidden min-h-0 flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm md:block">
-  <table class="w-full min-w-[900px] text-sm">
+     right below), and scroll internally instead of leaving dead space below.
+     The wrapper carries the right-edge fade that says more columns are
+     hidden. Number headers draw their menu button first (flex-row-reverse),
+     so the label ends where the right-aligned numbers end. -->
+<div class="relative hidden min-h-0 flex-1 md:flex">
+<div
+  class="min-h-0 flex-1 overflow-auto rounded-lg border border-zinc-200 bg-white shadow-sm"
+  bind:this={scroller}
+  onscroll={updateFade}
+>
+  <table class="w-full min-w-max text-sm">
     <thead>
       <tr>
         {#if canEdit}
@@ -269,9 +294,9 @@
             >
               {#snippet children({ checked, indeterminate })}
                 {#if indeterminate}
-                  <Minus class="size-3 text-white" />
+                  <Minus class="size-3 text-brand-on" />
                 {:else if checked}
-                  <Check class="size-3 text-white" />
+                  <Check class="size-3 text-brand-on" />
                 {/if}
               {/snippet}
             </Checkbox.Root>
@@ -287,7 +312,7 @@
             class="group sticky top-0 z-20 border-b border-zinc-200 bg-zinc-50 px-1.5 py-1 text-left text-xs font-medium whitespace-nowrap text-zinc-600 select-none {j === 0 ? (canEdit ? 'left-[84px]' : 'left-12') : ''} {sort === col ? 'text-zinc-900' : ''}"
             aria-sort={sort === col ? (order === "asc" ? "ascending" : "descending") : "none"}
           >
-            <span class="flex items-center gap-0.5 {types[j] === 'number' ? 'justify-end' : ''}">
+            <span class="flex items-center gap-0.5 {types[j] === 'number' ? 'flex-row-reverse justify-start' : ''}">
               <button
                 class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-zinc-100 hover:text-zinc-900"
                 title={sort === col ? (order === "asc" ? `Sorted by ${col} ascending - click for descending` : `Sorted by ${col} descending - click to clear`) : `Sort by ${col}`}
@@ -359,7 +384,7 @@
                 onCheckedChange={(c) => onselect(row.id, c === true)}
               >
                 {#snippet children({ checked })}
-                  {#if checked}<Check class="size-3 text-white" />{/if}
+                  {#if checked}<Check class="size-3 text-brand-on" />{/if}
                 {/snippet}
               </Checkbox.Root>
             </td>
@@ -372,7 +397,7 @@
                 {#snippet child({ props })}
                   <td
                     {...props}
-                    class="sticky left-9 z-10 bg-white px-1.5 py-1 font-mono text-xs text-zinc-500 tabular-nums select-none group-hover:bg-zinc-50"
+                    class="sticky left-9 z-10 bg-white px-1.5 py-1 text-xs text-zinc-500 tabular-nums select-none group-hover:bg-zinc-50"
                     title={row.id}
                   >
                     <DropdownMenu.Root>
@@ -399,7 +424,7 @@
               </ContextMenu.Portal>
             </ContextMenu.Root>
           {:else}
-            <td class="sticky left-0 z-10 bg-white px-3 py-1.5 font-mono text-xs text-zinc-500 tabular-nums group-hover:bg-zinc-50" title={row.id}>
+            <td class="sticky left-0 z-10 bg-white px-3 py-1.5 text-xs text-zinc-500 tabular-nums group-hover:bg-zinc-50" title={row.id}>
               {i + 1}
             </td>
           {/if}
@@ -482,4 +507,9 @@
       {/each}
     </tbody>
   </table>
+</div>
+{#if moreRight}
+  <!-- z-30: above the sticky header/first-column cells (z-10/z-20) -->
+  <div class="pointer-events-none absolute inset-y-px right-px z-30 w-12 rounded-r-lg bg-gradient-to-l from-white to-transparent"></div>
+{/if}
 </div>

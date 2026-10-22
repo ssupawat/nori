@@ -14,6 +14,7 @@
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import X from "@lucide/svelte/icons/x";
   import GenArt from "./lib/GenArt.svelte";
+  import TableIcon from "./lib/TableIcon.svelte";
   import ArtBackground from "./lib/ArtBackground.svelte";
   import NewTableDialog from "./lib/NewTableDialog.svelte";
   import ImportXlsx from "./lib/ImportXlsx.svelte";
@@ -241,7 +242,7 @@
             pickTable(t.name);
           }}
         >
-          <GenArt seed={t.name} variant={3} w={64} h={64} class="size-5 shrink-0 rounded-md border border-zinc-200" />
+          <TableIcon name={t.name} />
           <span class="truncate">{t.name}</span>
         </a>
       {/each}
