@@ -296,7 +296,7 @@
     <div class="wrap">
       <h2>Quick start</h2>
       <p class="lede">One file to run. Database and dashboard included.</p>
-<pre class="code"><span class="c"># download the binary for your platform from GitHub Releases, then:</span>
+<pre class="code"><span class="c"># download the binary for your platform from <a href="https://github.com/ssupawat/nori/releases" target="_blank" rel="noopener">GitHub Releases</a>, then:</span>
 ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 
 <span class="c"># open http://localhost:8080, sign in as admin,
@@ -307,6 +307,7 @@ ADMIN_PASS=secret ./nori -addr :8080 -data ./data
         <li><b>~110s</b> to import it, <b>&lt;8s</b> to export it</li>
         <li><b>fsync</b> on every write</li>
         <li><b>200,000</b> rows per table, stated up front</li>
+          <li><b>1GB</b> RAM carries the full cap; plan less and nori tells you at startup</li>
       </ul>
     </div>
   </section>
@@ -314,7 +315,7 @@ ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 
 <footer class="site">
   <div class="wrap">
-    <span>Open source under <a href="https://opensource.org/license/mit" rel="license">MIT</a>.</span>
+    <span>Open source under <a href="https://opensource.org/license/mit" rel="license">MIT</a> &middot; <a href="https://github.com/ssupawat/nori" target="_blank" rel="noopener">GitHub</a> &middot; <a href="https://github.com/ssupawat/nori/blob/main/docs/deploy.md" target="_blank" rel="noopener">Deploy guide</a></span>
     <span><a href="#top">Back to top</a></span>
   </div>
 </footer>
