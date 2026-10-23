@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>nori - import a spreadsheet, get an API</title>
+<title>nori: import a spreadsheet, get an API</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <meta name="description" content="nori is a single-binary backend: import a spreadsheet and every sheet becomes a private table with a CRUD API, accounts, and an admin dashboard. Self-host it in one command.">
 <style>
@@ -183,19 +183,19 @@
           <span class="dot"></span>
           <span class="verb">Google Sheets</span>
           <h3>Not made for apps</h3>
-          <p>Shared links instead of accounts, OAuth plumbing when it gets serious, quotas - and one stray edit away from a broken backend.</p>
+          <p>Shared links instead of accounts, OAuth plumbing when it gets serious, quotas, and one stray edit away from a broken backend.</p>
         </div>
         <div class="stop hl">
           <span class="dot"></span>
           <span class="verb">nori</span>
           <h3>Auth, data, and the basics</h3>
-          <p>Your spreadsheet as a private backend: accounts and roles, a resource-shaped API, audit trail and backups - nothing else to decide. Self-hosted in one command.</p>
+          <p>Your spreadsheet as a private backend: accounts and roles, a resource-shaped API, audit trail and backups. Nothing else to decide. Self-hosted in one command.</p>
         </div>
         <div class="stop">
           <span class="dot"></span>
           <span class="verb">Database / BaaS</span>
           <h3>Every choice, day one</h3>
-          <p>Provider, plan, schema, SDK, auth flows - powerful, but most of it goes unused while all you need is one table behind login.</p>
+          <p>Provider, plan, schema, SDK, auth flows. Powerful, but most of it goes unused while all you need is one table behind login.</p>
         </div>
       </div>
     </div>
@@ -204,7 +204,7 @@
   <section id="how">
     <div class="wrap">
       <h2>Three steps, one binary</h2>
-      <p class="lede">One process over one file, durable on every write - that is the whole deployment.</p>
+      <p class="lede">One process over one file, durable on every write. That is the whole deployment.</p>
       <ol class="steps">
         <li><b>Run it</b>
           <p>Start the binary with a data directory and an admin password.</p></li>
@@ -212,7 +212,7 @@
           <p>Every sheet becomes a table. Column types are detected and every value is validated from then on.</p></li>
         <li><b>Build on the API</b>
           <p>Humans get sessions, machines get revocable API keys, and the docs are written for
-          your coding agents - Claude Code, Cursor, Codex.</p></li>
+          your coding agents: Claude Code, Cursor, Codex.</p></li>
       </ol>
       <div class="play">
         <div class="req"><span class="m">GET</span>&nbsp;/api/tables/Orders/rows<span id="p-qs"></span></div>
@@ -241,7 +241,7 @@
   <section id="use-cases">
     <div class="wrap">
       <h2>Where nori fits</h2>
-      <p class="lede">Small teams run on workbooks - a few sheets, one per subject. Imported,
+      <p class="lede">Small teams run on workbooks: a few sheets, one per subject. Imported,
       the workbook runs the place:</p>
       <p class="storylabel">A bakery</p>
       <div class="story">
@@ -260,7 +260,7 @@
         </div>
         <div class="via"><b>&rarr;</b>import</div>
         <ul class="serves">
-          <li><b>Counter staff</b><span>Update the status column in the dashboard - one account each, every write audited.</span></li>
+          <li><b>Counter staff</b><span>Update the status column in the dashboard. One account each, every write audited.</span></li>
           <li><b>Shop website</b><span>Reads the day's queue: <code>GET /api/tables/Orders/rows</code></span></li>
           <li><b>Delivery app</b><span>Marks orders delivered through the API with its own revocable key.</span></li>
         </ul>
@@ -281,10 +281,10 @@
           </div>
         </div>
         <p class="asis">nori takes it as-is: Thai and English in one sheet, time ranges as plain
-        text, blank cells stay blank - the sheet is the schema.</p>
+        text, blank cells stay blank. The sheet is the schema.</p>
         <div class="via"><b>&darr;</b>import</div>
         <ul class="serves row3">
-          <li><b>Head nurse</b><span>Owns the workbook - edits OPD hours in the dashboard when the rotation changes.</span></li>
+          <li><b>Head nurse</b><span>Owns the workbook. Edits OPD hours in the dashboard when the rotation changes.</span></li>
           <li><b>Schedule app</b><span>Reads the roster: <code>GET /api/tables/Doctors/rows</code></span></li>
           <li><b>Doctors</b><span>Check their OPD hours from their phones with viewer accounts.</span></li>
         </ul>
@@ -295,12 +295,12 @@
   <section id="quickstart">
     <div class="wrap">
       <h2>Quick start</h2>
-      <p class="lede">One file to run - database and dashboard included.</p>
+      <p class="lede">One file to run. Database and dashboard included.</p>
 <pre class="code"><span class="c"># download the binary for your platform from GitHub Releases, then:</span>
 ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 
 <span class="c"># open http://localhost:8080, sign in as admin,
-# then import an .xlsx - every sheet becomes a table</span></pre>
+# then import an .xlsx. Every sheet becomes a table</span></pre>
       <p class="friction">Prefer building yourself? <b>go build</b> works too, and a Dockerfile is included.</p>
       <ul class="facts">
         <li><b>~125ms</b> to search a full 200,000-row table</li>
