@@ -34,7 +34,7 @@ POST   /api/tables                              {"name":"New","columns":[{"name"
 GET    /api/tables/{t}/rows                     list - see query params below
 POST   /api/tables/{t}/rows                     {"col":"value",...}        editor+
 GET    /api/tables/{t}/rows/{id}
-PATCH  /api/tables/{t}/rows/{id}                partial update             editor+
+PATCH  /api/tables/{t}/rows/{id}                partial update; {"col":{"inc":n}} adds n to a number   editor+
 DELETE /api/tables/{t}/rows/{id}                                           editor+
 GET    /api/tables/{t}/export                   download .xlsx
 POST   /api/tables/{t}/columns                  {"name":"New col","type":"number"}   admin
@@ -73,18 +73,36 @@ GET    /llms.txt                plain-text handbook written for AI agents (login
 - **Machines** (AI agents, server-side scripts, cron jobs) use **API keys**: `nri_<hex>`, no expiry, revocable anytime, role attached (builder/viewer/editor/admin; new keys default to builder, which never sees a row). Created on the Access page (admin only); the full key is shown once and only its SHA-256 hash is stored. Same `Authorization: Bearer nri_...` header. Never ship a key inside browser frontend code.
 - `POST /api/login` is rate-limited per IP (10 attempts/minute → 429). Deploy behind TLS - tokens travel in plain headers otherwise. Rate limiting counts by client IP: directly exposed, that is RemoteAddr; behind a reverse proxy start with `-trust-proxy` so it counts visitors (X-Forwarded-For) instead of the proxy.
 
+## Updating a number in place
+
+`PATCH` normally sets a value, so changing a counter means read, add, write - and two clients doing that at once lose an update. For a **number** column, send `{"inc": n}` instead of a value and the server adds `n` to the stored number under the same lock as the write (an empty cell counts as 0):
+
+```sh
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"qty": {"inc": -1}, "updated": "2026-10-23 09:30"}' \
+  http://localhost:8080/api/tables/Products/rows/$ID
+```
+
+`n` is a JSON number or a numeric string, may be negative or decimal (decimals add exactly: 0.1 + 0.2 is 0.3), and the response is the updated row. It can be mixed with plain values for other columns, but not for the same column. It is a 400 on a non-number column, a non-numeric `n`, or a result that is not a valid number; `inc` is only accepted on `PATCH`. The audit trail records the resulting value like any other update.
+
 ## List query params
 
 - `limit` (default 50, max 1000), `offset`
 - `q` - case-insensitive substring across all columns
 - `sort` + `order=asc|desc` - sort by a column
 - any **column name** as a param = contains-filter on that column, e.g. `?email=user001` matches `user001@example.com`
+- a column param can also carry an **operator**, written `op:value`: `eq`, `ne` (exact, case-insensitive; `eq:` alone matches empty cells), `lt`, `lte`, `gt`, `gte` (number, date and datetime columns only; empty cells never match), and `contains` (the default, spelled out - use it to search text that itself starts with an operator, e.g. `?note=contains:eq:5`). Comparisons follow the column type: `qty=lt:5` is numeric, `seen=gte:2026-01-01` is a date. Repeat a column for a range: `?qty=gte:5&qty=lt:10` (repeated plain values must all match too: `?name=ann&name=lee` finds "Ann Lee"). To compare with **another column of the same row**, write the operand as `col:<name>`: `?qty=lt:col:reorder_level` lists rows below their own threshold. Both columns must have the same type, `lt`/`gt` still need number, date or datetime, and a row where either number/date cell is empty does not match (except `ne`); to search for text that starts with `col:`, use `contains:col:...`. All filters must match; a value that does not fit the column type, or `lt`/`gt` on a text column, is a 400
 
 Example:
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/tables/Products/rows?status=active&sort=price&order=asc&limit=20"
+
+# exact SKU, and everything running low
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/tables/Products/rows?sku=eq:A100"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/tables/Products/rows?qty=lt:5"
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8080/api/tables/Products/rows?qty=lt:col:reorder_level"
 ```
 
 Response of a list:

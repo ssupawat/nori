@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"slices"
 	"sort"
 	"strconv"
@@ -31,6 +33,10 @@ func (s *Store) GetRows(table string, rq RowQuery) ([]map[string]string, int, er
 			return nil, 0, invalidf("unknown filter column %q", col)
 		}
 	}
+	conds, err := s.compileConds(rq.Conds, columns, types)
+	if err != nil {
+		return nil, 0, err
+	}
 	limit := rq.Limit
 	if limit <= 0 {
 		limit = defaultLimit
@@ -49,8 +55,8 @@ func (s *Store) GetRows(table string, rq RowQuery) ([]map[string]string, int, er
 	}
 
 	var work []rowDoc
-	if rq.Q != "" || len(rq.Filters) > 0 {
-		work = filterEntries(entries, columns, rq)
+	if rq.Q != "" || len(rq.Filters) > 0 || len(conds) > 0 {
+		work = filterEntries(entries, columns, rq, conds)
 	} else if rq.Sort != "" {
 		work = make([]rowDoc, len(entries))
 		copy(work, entries)
@@ -103,7 +109,7 @@ func (s *Store) fillColumns(table string, row map[string]string) (map[string]str
 	return withAllColumns(row, columns), nil
 }
 
-func filterEntries(entries []rowDoc, columns []string, rq RowQuery) []rowDoc {
+func filterEntries(entries []rowDoc, columns []string, rq RowQuery, conds []compiledCond) []rowDoc {
 	q := strings.ToLower(rq.Q)
 	filters := make(map[string]string, len(rq.Filters))
 	for col, want := range rq.Filters {
@@ -111,7 +117,7 @@ func filterEntries(entries []rowDoc, columns []string, rq RowQuery) []rowDoc {
 	}
 	out := make([]rowDoc, 0, len(entries))
 	for _, e := range entries {
-		if !matchRow(e, columns, q, filters) {
+		if !matchRow(e, columns, q, filters) || !matchConds(e, conds) {
 			continue
 		}
 		out = append(out, e)
@@ -279,6 +285,13 @@ func columnNames(cols []Column) []string {
 // old row). Old and new are captured under one lock, so callers get a
 // consistent before/after pair even under concurrent updates.
 func (s *Store) UpdateRow(table, id string, values map[string]string) (map[string]string, map[string]string, error) {
+	return s.UpdateRowOps(table, id, values, nil)
+}
+
+// UpdateRowOps is UpdateRow plus incs: number columns to add a delta to.
+// The addition happens under the same lock as the write. An empty cell
+// counts as 0; a column cannot be both set and incremented.
+func (s *Store) UpdateRowOps(table, id string, values, incs map[string]string) (map[string]string, map[string]string, error) {
 	s.tablesMu.RLock()
 	defer s.tablesMu.RUnlock()
 	if err := s.checkTable(table); err != nil {
@@ -306,6 +319,23 @@ func (s *Store) UpdateRow(table, id string, values map[string]string) (map[strin
 		}
 		values[k] = norm
 	}
+	deltas := make(map[string]*big.Rat, len(incs))
+	for k, raw := range incs {
+		if !slices.Contains(names, k) {
+			return nil, nil, invalidf("unknown column %q", k)
+		}
+		if _, dup := values[k]; dup {
+			return nil, nil, invalidf("column %q: cannot be set and incremented in one update", k)
+		}
+		if types[k] != TypeNumber {
+			return nil, nil, invalidf("column %q: inc needs a number column, not %s", k, types[k])
+		}
+		norm, err := s.NormalizeColumn(TypeNumber, raw)
+		if err != nil || norm == "" {
+			return nil, nil, invalidf("column %q: inc must be a number", k)
+		}
+		deltas[k], _ = new(big.Rat).SetString(norm)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	oldDoc, err := s.db.FindById(table, id)
@@ -316,6 +346,13 @@ func (s *Store) UpdateRow(table, id string, values map[string]string) (map[strin
 		return nil, nil, ErrNotFound
 	}
 	old := docToRow(oldDoc)
+	for k, delta := range deltas {
+		sum, err := addNumber(old[k], delta)
+		if err != nil {
+			return nil, nil, invalidf("column %q: %v", k, err)
+		}
+		values[k] = sum
+	}
 	if err := s.db.UpdateById(table, id, func(doc *d.Document) *d.Document {
 		for k, v := range values {
 			doc.Set(k, v)
@@ -800,4 +837,23 @@ func (s *Store) maxSeq(table string) (int64, error) {
 	}
 	seq, _ := doc.Get("seq").(int64)
 	return seq, nil
+}
+
+// addNumber returns cur + delta as a canonical number string. Decimal
+// arithmetic is exact (0.1 + 0.2 is 0.3), and the sum must still be a
+// value a number column accepts.
+func addNumber(cur string, delta *big.Rat) (string, error) {
+	base := new(big.Rat)
+	if cur != "" {
+		if _, ok := base.SetString(cur); !ok {
+			return "", fmt.Errorf("stored value %q is not a number", cur)
+		}
+	}
+	sum := base.Add(base, delta)
+	f, _ := sum.Float64()
+	if math.IsInf(f, 0) || math.Abs(f) >= 1e15 && sum.IsInt() {
+		return "", fmt.Errorf("result has too many digits to be a number")
+	}
+	out := strings.TrimRight(sum.FloatString(12), "0")
+	return strings.TrimSuffix(out, "."), nil
 }

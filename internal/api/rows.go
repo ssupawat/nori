@@ -61,7 +61,16 @@ func (sv *Server) listRows(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown filter column %q", col))
 			return
 		}
-		filters[col] = values[0]
+		for _, v := range values {
+			if op, val, ok := store.ParseFilterOp(v); ok {
+				rq.Conds = append(rq.Conds, store.Cond{Col: col, Op: op, Val: val})
+			} else if _, seen := filters[col]; !seen {
+				filters[col] = v
+			} else {
+				// a repeated plain value must match too
+				rq.Conds = append(rq.Conds, store.Cond{Col: col, Op: store.OpContains, Val: v})
+			}
+		}
 	}
 	rq.Filters = filters
 
@@ -125,6 +134,64 @@ func (sv *Server) rowValues(w http.ResponseWriter, r *http.Request, table string
 	return values, true
 }
 
+// rowUpdate is rowValues for PATCH: a column may also be an {"inc": n}
+// object, which adds n to the stored number instead of replacing it.
+func (sv *Server) rowUpdate(w http.ResponseWriter, r *http.Request, table string) (values, incs map[string]string, ok bool) {
+	var body map[string]any
+	dec := json.NewDecoder(r.Body)
+	dec.UseNumber()
+	if err := dec.Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return nil, nil, false
+	}
+	columns, err := sv.store.GetColumns(table)
+	if err != nil {
+		serverError(w, err)
+		return nil, nil, false
+	}
+	values = make(map[string]string, len(body))
+	incs = map[string]string{}
+	for k, v := range body {
+		if k == "id" {
+			continue
+		}
+		if !slices.Contains(columns, k) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown column %q; valid columns: %s", k, strings.Join(columns, ", ")))
+			return nil, nil, false
+		}
+		if obj, isObj := v.(map[string]any); isObj {
+			n, valid := incOperand(obj)
+			if !valid {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf(`column %q: the only supported object is {"inc": <number>}`, k))
+				return nil, nil, false
+			}
+			incs[k] = n
+			continue
+		}
+		if n, isNum := v.(json.Number); isNum {
+			f, _ := n.Float64() // plain values render as float64
+			v = f
+		}
+		values[k] = stringify(v)
+	}
+	return values, incs, true
+}
+
+// incOperand reads the number from {"inc": n}; n may be a JSON number or a
+// numeric string.
+func incOperand(obj map[string]any) (string, bool) {
+	if len(obj) != 1 {
+		return "", false
+	}
+	switch n := obj["inc"].(type) {
+	case json.Number:
+		return n.String(), true
+	case string:
+		return n, n != ""
+	}
+	return "", false
+}
+
 func stringify(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -158,12 +225,12 @@ func (sv *Server) updateRow(w http.ResponseWriter, r *http.Request) {
 	if !sv.checkTable(w, table) {
 		return
 	}
-	values, ok := sv.rowValues(w, r, table)
+	values, incs, ok := sv.rowUpdate(w, r, table)
 	if !ok {
 		return
 	}
 	id := chi.URLParam(r, "id")
-	row, old, err := sv.store.UpdateRow(table, id, values)
+	row, old, err := sv.store.UpdateRowOps(table, id, values, incs)
 	if mapStoreErr(w, err) {
 		return
 	}
@@ -171,6 +238,11 @@ func (sv *Server) updateRow(w http.ResponseWriter, r *http.Request) {
 	for k, v := range values {
 		if old == nil || old[k] != v {
 			changes[k] = v
+		}
+	}
+	for k := range incs {
+		if old == nil || old[k] != row[k] {
+			changes[k] = row[k] // the resulting value
 		}
 	}
 	sv.auditEvent(r, "update_row", table, id, changes)

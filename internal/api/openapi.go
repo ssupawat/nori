@@ -144,6 +144,17 @@ func openAPI() map[string]any {
 			"additionalProperties", obj("type", "string"),
 			"properties", obj("id", obj("type", "string", "description", "server-generated row id")),
 		),
+		"RowPatch", obj("type", "object",
+			"description", "Columns to change. A value is the new string, or, for a number column, {\"inc\": n} to add n to the stored number atomically.",
+			"additionalProperties", obj("oneOf", []any{
+				obj("type", "string"),
+				obj("type", "object",
+					"properties", obj("inc", obj("oneOf", []any{obj("type", "number"), obj("type", "string")},
+						"description", "amount to add; negative to subtract; an empty cell counts as 0")),
+					"required", []string{"inc"},
+					"additionalProperties", false),
+			}),
+		),
 		"RowsPage", obj("type", "object", "properties", obj(
 			"columns", obj("type", "array", "items", obj("type", "string")),
 			"types", obj("type", "array", "items", obj("type", "string")),
@@ -361,7 +372,7 @@ func openAPI() map[string]any {
 					obj("name", "sort", "in", "query", "schema", obj("type", "string"), "description", "column name to sort by"),
 					obj("name", "order", "in", "query", "schema", obj("type", "string", "enum", []string{"asc", "desc"}, "default", "asc")),
 					obj("name", "{col}", "in", "query", "style", "form", "schema", obj("type", "string"),
-						"description", "any column name as a query param = case-insensitive contains-filter on that column (e.g. email=user001)"),
+						"description", "any column name as a query param = case-insensitive contains-filter on that column (e.g. email=user001). A value may start with an operator: eq:/ne: (exact), lt:/lte:/gt:/gte: (number, date, datetime columns; e.g. qty=lt:5), contains: (the default, spelled out). Repeat a column for a range (qty=gte:5&qty=lt:10); repeated plain values must all match too. An operand col:<name> compares with that column of the same row (qty=lt:col:reorder_level; both columns of one type). All filters must match"),
 				},
 				"responses", merge(
 					response("200", "OK", sref("RowsPage")),
@@ -387,8 +398,8 @@ func openAPI() map[string]any {
 					refs("401", "Unauthorized", "404", "NotFound"),
 				),
 			)),
-			"patch", merge(op("Rows", "Partial update of a row (editor+)"), obj(
-				"requestBody", requestBody(sref("Row")),
+			"patch", merge(op("Rows", "Partial update of a row (editor+). Send only the columns to change; a number column may take {\"inc\": n} instead of a value to add n to the stored number atomically (negative to subtract), e.g. {\"qty\": {\"inc\": -1}}"), obj(
+				"requestBody", requestBody(sref("RowPatch")),
 				"responses", merge(
 					plain("200", "Updated row"),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
