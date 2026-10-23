@@ -56,8 +56,9 @@ type RowQuery struct {
 	Offset  int
 	Q       string
 	Sort    string
-	Order   string // "asc" or "desc"
-	Filters map[string]string
+	Order   string            // "asc" or "desc"
+	Filters map[string]string // contains-match per column
+	Conds   []Cond            // operator filters (eq, ne, lt, ...), all must hold
 }
 
 type Store struct {

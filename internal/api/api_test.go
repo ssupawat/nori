@@ -598,6 +598,18 @@ func TestLLMsTxt(t *testing.T) {
 	if strings.Contains(body, "POST /api/import") {
 		t.Fatalf("llms.txt should defer endpoint details to openapi.json:\n%s", body)
 	}
+	if !strings.Contains(body, "?qty=lt:5") || !strings.Contains(body, "lt:col:reorder_level") || !strings.Contains(body, `{"qty":{"inc":-1}}`) {
+		t.Fatalf("llms.txt should mention operator filters and inc:\n%s", body)
+	}
+
+	// Act + Assert: the served spec describes them too.
+	if res, spec := e.do("GET", "/openapi.json", admin, nil); res.StatusCode != http.StatusOK ||
+		!strings.Contains(string(spec), "lt:/lte:/gt:/gte:") || !strings.Contains(string(spec), `{\"inc\": n}`) {
+		t.Fatalf("openapi.json should describe operator filters and inc: %d", res.StatusCode)
+	}
+	if _, spec := e.do("GET", "/openapi.json", admin, nil); !strings.Contains(string(spec), `"#/components/schemas/RowPatch"`) {
+		t.Fatal("PATCH body should use the RowPatch schema")
+	}
 
 	// Act + Assert: without a token it is 401.
 	res, _ = e.do("GET", "/llms.txt", "", nil)
@@ -1672,5 +1684,126 @@ func TestMeAndAuditActorFilter(t *testing.T) {
 		if e.User != "key:bot" {
 			t.Fatalf("filter leaked %+v", e)
 		}
+	}
+}
+
+func TestRowOperatorFiltersOverHTTP(t *testing.T) {
+	// Arrange: a Stock table whose qty column imports as a number.
+	e := newTestEnv(t)
+	admin := e.login("admin", "adminpw1")
+	e.importXlsx(admin, map[string][][]string{
+		"Stock": {
+			{"sku", "qty"},
+			{"A100", "5"},
+			{"A1001", "12"},
+			{"B2100", "2"},
+		},
+	}, "replace")
+	list := func(query string) (int, map[string]any) {
+		res, decoded := e.doJSON("GET", "/api/tables/Stock/rows?"+query, admin, nil)
+		return res.StatusCode, decoded
+	}
+
+	// Act + Assert: a plain value is still a contains-match.
+	if code, d := list("sku=A100"); code != http.StatusOK || d["total"] != float64(2) {
+		t.Fatalf("contains: %d %v", code, d)
+	}
+	// Act + Assert: repeated plain values must all match.
+	if code, d := list("sku=A100&sku=1001"); code != http.StatusOK || d["total"] != float64(1) {
+		t.Fatalf("repeated contains: %d %v", code, d)
+	}
+	if code, d := list("sku=A&sku=B"); code != http.StatusOK || d["total"] != float64(0) {
+		t.Fatalf("repeated contains, no row has both: %d %v", code, d)
+	}
+	// Act + Assert: eq is exact.
+	if code, d := list("sku=eq:A100"); code != http.StatusOK || d["total"] != float64(1) {
+		t.Fatalf("eq: %d %v", code, d)
+	}
+	// Act + Assert: numeric comparison, and two conditions on one column make a range.
+	if code, d := list("qty=lt:5"); code != http.StatusOK || d["total"] != float64(1) {
+		t.Fatalf("lt: %d %v", code, d)
+	}
+	if code, d := list("qty=gte:5&qty=lt:12"); code != http.StatusOK || d["total"] != float64(1) {
+		t.Fatalf("range: %d %v", code, d)
+	}
+	// Act + Assert: operators combine with sort and with plain filters.
+	code, d := list("qty=gt:1&sku=A100&sort=qty&order=desc")
+	if rows, _ := d["rows"].([]any); code != http.StatusOK || len(rows) != 2 || rows[0].(map[string]any)["sku"] != "A1001" {
+		t.Fatalf("combined: %d %v", code, d)
+	}
+	// Act + Assert: col: compares with another column of the same row.
+	if code, d := list("qty=lt:col:qty"); code != http.StatusOK || d["total"] != float64(0) {
+		t.Fatalf("col ref: %d %v", code, d)
+	}
+	if code, d := list("qty=lte:col:qty"); code != http.StatusOK || d["total"] != float64(3) {
+		t.Fatalf("col ref lte: %d %v", code, d)
+	}
+	if code, d := list("qty=lt:col:sku"); code != http.StatusBadRequest {
+		t.Fatalf("col ref type mismatch: %d %v", code, d)
+	}
+	// Act + Assert: a bad operand and an ordered operator on text are 400s.
+	if code, d := list("qty=lt:abc"); code != http.StatusBadRequest {
+		t.Fatalf("bad operand: %d %v", code, d)
+	}
+	if code, d := list("sku=gt:5"); code != http.StatusBadRequest {
+		t.Fatalf("ordered op on text: %d %v", code, d)
+	}
+}
+
+func TestPatchIncrementOverHTTP(t *testing.T) {
+	// Arrange: a Stock table with a numeric qty and a viewer account.
+	e := newTestEnv(t)
+	admin := e.login("admin", "adminpw1")
+	e.importXlsx(admin, map[string][][]string{
+		"Stock": {{"sku", "qty"}, {"A100", "5"}},
+	}, "replace")
+	if err := e.createUsersViaAPI(admin); err != nil {
+		t.Fatalf("users: %v", err)
+	}
+	_, rows := e.doJSON("GET", "/api/tables/Stock/rows", admin, nil)
+	id := rows["rows"].([]any)[0].(map[string]any)["id"].(string)
+	patch := func(token, body string) (int, map[string]any) {
+		res, d := e.doJSON("PATCH", "/api/tables/Stock/rows/"+id, token, strings.NewReader(body))
+		return res.StatusCode, d
+	}
+
+	// Act + Assert: inc adds to the stored number, with a number or a string operand.
+	if code, d := patch(admin, `{"qty": {"inc": -2}}`); code != http.StatusOK || d["qty"] != "3" {
+		t.Fatalf("inc: %d %v", code, d)
+	}
+	if code, d := patch(admin, `{"qty": {"inc": "0.5"}}`); code != http.StatusOK || d["qty"] != "3.5" {
+		t.Fatalf("inc string: %d %v", code, d)
+	}
+	// Act + Assert: inc mixes with plain sets in one update.
+	if code, d := patch(admin, `{"sku": "C200", "qty": {"inc": 1}}`); code != http.StatusOK || d["qty"] != "4.5" || d["sku"] != "C200" {
+		t.Fatalf("mixed: %d %v", code, d)
+	}
+	// Act + Assert: invalid operations are 400s and leave the row alone.
+	for name, body := range map[string]string{
+		"text column":   `{"sku": {"inc": 1}}`,
+		"not a number":  `{"qty": {"inc": "x"}}`,
+		"unknown key":   `{"qty": {"dec": 1}}`,
+		"extra key":     `{"qty": {"inc": 1, "set": 2}}`,
+		"inc on null":   `{"qty": {"inc": null}}`,
+		"nested object": `{"qty": {"inc": {"inc": 1}}}`,
+	} {
+		if code, d := patch(admin, body); code != http.StatusBadRequest {
+			t.Fatalf("%s: %d %v", name, code, d)
+		}
+	}
+	if _, d := e.doJSON("GET", "/api/tables/Stock/rows/"+id, admin, nil); d["qty"] != "4.5" {
+		t.Fatalf("rejected updates changed the row: %v", d)
+	}
+	// Act + Assert: create does not take operations.
+	res, d := e.doJSON("POST", "/api/tables/Stock/rows", admin, strings.NewReader(`{"sku": "9", "qty": {"inc": 1}}`))
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create with inc: %d %v", res.StatusCode, d)
+	}
+
+	// Act + Assert: the audit trail records the resulting value.
+	e.srv.audit.flush()
+	_, raw := e.do("GET", "/api/audit?table=Stock&rowId="+id, admin, nil)
+	if !strings.Contains(string(raw), `"qty":"3"`) {
+		t.Fatalf("audit lacks the incremented value: %s", raw)
 	}
 }
