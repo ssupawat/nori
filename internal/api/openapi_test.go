@@ -172,3 +172,30 @@ func TestOpenAPITypedTablePaths(t *testing.T) {
 		t.Errorf("generic list still declares a {col} parameter")
 	}
 }
+
+func TestLLMsTxtAccessSection(t *testing.T) {
+	// Arrange: an admin session, and an editor and a builder key.
+	e := newTestEnv(t)
+	admin := e.login("admin", "adminpw1")
+	key := func(name, role string) string {
+		_, body := e.doJSON("POST", "/api/keys/", admin, strings.NewReader(`{"name":"`+name+`","role":"`+role+`"}`))
+		return body["key"].(string)
+	}
+	for caller, want := range map[string]string{
+		admin:                         "You are admin with the admin role. You can do everything",
+		key("writer", "editor"):       "You are key:writer with the editor role. You can read and write rows",
+		key("schema-only", "builder"): "You are key:schema-only with the builder role. You can read the schema",
+	} {
+		// Act
+		res, raw := e.do("GET", "/llms.txt", caller, nil)
+
+		// Assert: the caller's own role comes first, then the shared rules.
+		body := string(raw)
+		if res.StatusCode != http.StatusOK || !strings.Contains(body, "## Access\n\n"+want) {
+			t.Fatalf("access section for %q:\n%s", want, body)
+		}
+		if !strings.Contains(body, "no per-table or per-row access") || !strings.Contains(body, "Never put a key in browser code") {
+			t.Fatalf("access section is missing the shared rules:\n%s", body)
+		}
+	}
+}
