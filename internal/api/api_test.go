@@ -598,6 +598,9 @@ func TestLLMsTxt(t *testing.T) {
 	if strings.Contains(body, "POST /api/import") {
 		t.Fatalf("llms.txt should defer endpoint details to openapi.json:\n%s", body)
 	}
+	if !strings.Contains(body, "offset >= total") || !strings.Contains(body, "operationId") || strings.Contains(body, "examples") {
+		t.Fatalf("llms.txt should explain paging and operationIds, and not promise examples:\n%s", body)
+	}
 	if !strings.Contains(body, "?qty=lt:5") || !strings.Contains(body, "lt:col:reorder_level") || !strings.Contains(body, `{"qty":{"inc":-1}}`) {
 		t.Fatalf("llms.txt should mention operator filters and inc:\n%s", body)
 	}
@@ -1034,7 +1037,11 @@ func TestOpenAPISpecCoversRoutes(t *testing.T) {
 	var spec struct {
 		Paths map[string]map[string]any `json:"paths"`
 	}
-	if err := json.Unmarshal(openapiJSON, &spec); err != nil {
+	raw, err := specJSON(nil)
+	if err != nil {
+		t.Fatalf("encode spec: %v", err)
+	}
+	if err := json.Unmarshal(raw, &spec); err != nil {
 		t.Fatalf("parse spec: %v", err)
 	}
 	normalize := func(p string) string { return strings.TrimSuffix(p, "/") }
@@ -1046,7 +1053,7 @@ func TestOpenAPISpecCoversRoutes(t *testing.T) {
 	root := chi.NewRouter()
 	root.Mount("/api", e.srv.Routes())
 	var missing []string
-	err := chi.Walk(root, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+	err = chi.Walk(root, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
 		if route == "/openapi.json" {
 			return nil
 		}

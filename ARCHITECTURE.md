@@ -60,8 +60,9 @@ flowchart LR
   (`internal/store/types.go`).
 - **The spec is generated from code.** /openapi.json is built from the
   same code as the handlers, and a route-coverage test fails when any
-  route is missing from the spec; llms.txt points at it
-  (`internal/api/openapi.go`).
+  route is missing from the spec; llms.txt points at it. Each request
+  adds typed paths for the tables that exist then
+  (`internal/api/openapi.go`, `internal/api/openapi_tables.go`).
 - **Stated limits.** 200,000 rows, 256 columns, 64MB imports - stated in
   /api/usage, the dashboard, llms.txt and README. Raising one means
   updating every place it is stated (`internal/store/types.go`).
