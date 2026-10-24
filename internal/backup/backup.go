@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -36,60 +37,111 @@ func DumpJSON(db *clover.DB, outDir string, keep int) (string, error) {
 	}
 	sort.Strings(names)
 
-	dump := map[string]any{
-		"format":      dumpFormat,
-		"created":     time.Now().UTC().Format(time.RFC3339),
-		"collections": map[string]any{},
-	}
-	colls := dump["collections"].(map[string]any)
 	skip := map[string]bool{
 		"_audit":    true, // trail starts empty after a restore
 		"_sessions": true, // restored deployments start logged out
 	}
-	for _, name := range names {
-		if skip[name] {
-			continue
-		}
-		docs, err := db.FindAll(query.NewQuery(name))
-		if err != nil {
-			return "", fmt.Errorf("read %s: %w", name, err)
-		}
-		list := make([]map[string]any, 0, len(docs))
-		for _, doc := range docs {
-			m := doc.ToMap()
-			// seq is an int64 (UnixNano) - JSON numbers would round it
-			// through float64 on decode, so it travels as a string
-			if seq, ok := m["seq"].(int64); ok {
-				m["seq"] = strconv.FormatInt(seq, 10)
-			}
-			list = append(list, m)
-		}
-		colls[name] = list
-	}
 
-	blob, err := json.Marshal(dump)
-	if err != nil {
-		return "", err
-	}
 	out := filepath.Join(outDir, fmt.Sprintf("nori-dump-%s.json.gz", time.Now().UTC().Format("20060102-150405.000000000")))
 	f, err := os.OpenFile(out, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
 	gz := gzip.NewWriter(f)
-	if _, err := gz.Write(blob); err != nil {
-		f.Close()
-		os.Remove(out)
-		return "", err
+	bw := bufio.NewWriter(gz)
+
+	// docs stream one at a time from the KV prefix iterator; the
+	// hand-assembled JSON must match json.Marshal's key order
+	var dumpErr error
+	writeDoc := func(m map[string]any) []byte {
+		if seq, ok := m["seq"].(int64); ok {
+			// seq is an int64 (UnixNano) - JSON numbers would round it
+			// through float64 on decode, so it travels as a string
+			m["seq"] = strconv.FormatInt(seq, 10)
+		}
+		b, err := json.Marshal(m)
+		if err != nil && dumpErr == nil {
+			dumpErr = err
+		}
+		return b
 	}
-	if err := gz.Close(); err != nil {
-		f.Close()
-		os.Remove(out)
-		return "", err
+
+	_, _ = bw.WriteString(`{"collections":{`)
+	firstColl := true
+	for _, name := range names {
+		if skip[name] {
+			continue
+		}
+		if !firstColl {
+			_, _ = bw.WriteString(",")
+		}
+		firstColl = false
+		key, err := json.Marshal(name)
+		if err != nil {
+			return "", err
+		}
+		if _, err := bw.Write(key); err != nil {
+			return "", err
+		}
+		if _, err := bw.WriteString(":"); err != nil {
+			return "", err
+		}
+		firstDoc := true
+		err = db.ForEach(query.NewQuery(name), func(doc *d.Document) bool {
+			b := writeDoc(doc.ToMap())
+			if dumpErr != nil {
+				return false
+			}
+			if firstDoc {
+				_, err := bw.WriteString("[")
+				if err != nil && dumpErr == nil {
+					dumpErr = err
+				}
+				firstDoc = false
+			} else if _, err := bw.WriteString(","); err != nil && dumpErr == nil {
+				dumpErr = err
+			}
+			if _, err := bw.Write(b); err != nil && dumpErr == nil {
+				dumpErr = err
+			}
+			return dumpErr == nil
+		})
+		if dumpErr != nil {
+			f.Close()
+			os.Remove(out)
+			return "", dumpErr
+		}
+		if err != nil {
+			f.Close()
+			os.Remove(out)
+			return "", fmt.Errorf("read %s: %w", name, err)
+		}
+		if firstDoc {
+			_, _ = bw.WriteString("[")
+		}
+		if _, err := bw.WriteString("]"); err != nil {
+			f.Close()
+			os.Remove(out)
+			return "", err
+		}
 	}
-	if err := f.Close(); err != nil {
+	created, _ := json.Marshal(time.Now().UTC().Format(time.RFC3339))
+	_, werr := bw.WriteString("},\"created\":" + string(created) + ",\"format\":" + strconv.Itoa(dumpFormat) + "}")
+	if werr == nil {
+		werr = bw.Flush()
+	}
+	if werr == nil {
+		werr = gz.Close()
+	}
+	if werr == nil {
+		werr = f.Close()
+	}
+	if werr != nil || dumpErr != nil {
 		os.Remove(out)
-		return "", err
+		if dumpErr != nil {
+			return "", dumpErr
+		}
+		return "", werr
 	}
 
 	keepOld(outDir, keep)
