@@ -19,7 +19,7 @@ Fly's builder needs no Go or Node toolchain - a new version is a new
 The volume mounts at `/data`; the data file and the dumps share it (`-data /data/nori -backup-dir /data/backups`). Three things to know:
 
 - **One machine, always.** Two machines cannot share a volume; nori is single-node by design, and needing a cluster is the migration signal.
-- **Size the volume, not the schedule.** Dumps are full copies and `-backup-keep` (default 7) trims the oldest, so backup space stays at 7 dumps no matter how often they run. Verified at the ceiling (200k rows × 256 columns, 2026-10): the table itself is ~1.8 GB on disk, so disk was never the constraint - memory is. Reads, `nori check`, and dumps of a max-width table decode the whole table in RAM (~8-10 GB), which exceeds the 1 GB tier; keep max-width tables to a few thousand rows on small instances, or run wide workloads on a machine with 16 GB. For realistic widths the numbers from [configuration.md](configuration.md) apply.
+- **Size the volume, not the schedule.** Dumps are full copies and `-backup-keep` (default 7) trims the oldest, so backup space stays at 7 dumps no matter how often they run. Verified at the ceiling (200k rows × 256 columns, 2026-10): the table itself is ~1.8 GB on disk, so disk was never the constraint - memory is. Reads and `nori check` of a max-width table decode the whole table in RAM (~8-10 GB), which exceeds the 1 GB tier; keep max-width tables to a few thousand rows on small instances, or run wide workloads on a machine with 16 GB. Dumps stream row by row and don't hold the table in memory. For realistic widths the numbers from [configuration.md](configuration.md) apply.
 - **Every deploy backs up too.** Stopping the server (deploy included) writes a shutdown dump to the volume before the old machine goes away.
 
 Scale memory to your data: the row cache holds about 0.9 KB per row, so large tables want RAM (`fly scale memory 1024`). To try the image locally, podman builds and runs it the same way: `podman build -f Dockerfile.flyio --build-arg NORI_VERSION=v0.1.0-rc.1 -t nori . && podman run --rm -v ./data:/data -p 8080:8080 nori`.
@@ -76,7 +76,7 @@ Three things that trip this up:
 - Everything after `--` is command args only. The image entrypoint already provides the binary, so write `-- compact -data /data/nori`, not `-- /app/nori compact ...`.
 - One-off machines default to 256 MB. Fine for compact, but the final `fly deploy` plus `fly scale memory` is what restores the real server.
 
-Compact keeps a safety copy on the volume (`nori.bak-<timestamp>`, about the old file's size); delete it in a later maintenance window if disk gets tight. The data lives on the volume, not the machine, so stopping or destroying machines never touches it.
+Compact keeps a safety copy on the volume (`nori.bak-<timestamp>`, a directory copy of the old data dir); delete it with `rm -rf` from a one-off machine in a later maintenance window if disk gets tight. The data lives on the volume, not the machine, so stopping or destroying machines never touches it.
 
 ## Backups
 
