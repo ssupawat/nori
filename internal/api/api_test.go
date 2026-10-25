@@ -598,7 +598,7 @@ func TestLLMsTxt(t *testing.T) {
 	if strings.Contains(body, "POST /api/import") {
 		t.Fatalf("llms.txt should defer endpoint details to openapi.json:\n%s", body)
 	}
-	if !strings.Contains(body, "offset >= total") || !strings.Contains(body, "operationId") || strings.Contains(body, "examples") {
+	if !strings.Contains(body, "total counts every matching row") || !strings.Contains(body, "operationId") || strings.Contains(body, "examples") {
 		t.Fatalf("llms.txt should explain paging and operationIds, and not promise examples:\n%s", body)
 	}
 	if !strings.Contains(body, "?qty=lt:5") || !strings.Contains(body, "lt:col:reorder_level") || !strings.Contains(body, `{"qty":{"inc":-1}}`) {

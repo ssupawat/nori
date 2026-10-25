@@ -194,7 +194,7 @@ func TestLLMsTxtAccessSection(t *testing.T) {
 		if res.StatusCode != http.StatusOK || !strings.Contains(body, "## Access\n\n"+want) {
 			t.Fatalf("access section for %q:\n%s", want, body)
 		}
-		if !strings.Contains(body, "no per-table or per-row access") || !strings.Contains(body, "Never put a key in browser code") {
+		if !strings.Contains(body, "no per-table or per-row access") || !strings.Contains(body, "don't expire") {
 			t.Fatalf("access section is missing the shared rules:\n%s", body)
 		}
 	}
