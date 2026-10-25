@@ -1,0 +1,19 @@
+# Restores the demo every hour. Runs on the demo app's deploy token
+# (FLY_API_TOKEN, scoped to nori-demo). GitHub disables scheduled
+# workflows after 60 days without repo activity; any push resets that.
+name: demo-reset
+
+on:
+  schedule:
+    - cron: "3 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: ./demo/reset.sh
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

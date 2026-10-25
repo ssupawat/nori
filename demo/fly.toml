@@ -1,0 +1,29 @@
+# The public demo. Same shape as the production fly.toml, scaled down:
+# 256MB is ample for a few hundred rows, and everything on the volume
+# except .seed is disposable - scripts/demo-reset.sh restores the seed.
+app = "nori-demo"
+primary_region = "sin"
+
+[build]
+
+[env]
+  GOMEMLIMIT = "180MiB"
+
+[mounts]
+  source = "nori_demo_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/api/health"
