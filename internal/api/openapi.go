@@ -7,23 +7,28 @@ import (
 	"strings"
 
 	"nori/internal/auth"
+	"nori/internal/store"
 )
 
 // The OpenAPI document is built from the helpers below and served at
-// /openapi.json; TestOpenAPISpecCoversRoutes pins route coverage against
-// the real router. When a handler changes, change it here.
+// /openapi.json, with the typed per-table paths of openapi_tables.go added
+// for the tables that exist at request time. TestOpenAPISpecCoversRoutes
+// pins route coverage against the real router. When a handler changes,
+// change it here.
 
-// openapiJSON is the spec served at /openapi.json.
-var openapiJSON = func() []byte {
+// specJSON encodes the spec with the given tables' typed paths.
+func specJSON(tables []store.TableInfo) ([]byte, error) {
+	doc := openAPI()
+	addTablePaths(doc, tables)
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", " ")
-	if err := enc.Encode(openAPI()); err != nil {
-		panic(err) // built from literals; cannot fail
+	if err := enc.Encode(doc); err != nil {
+		return nil, err
 	}
-	return buf.Bytes()
-}()
+	return buf.Bytes(), nil
+}
 
 // ---- builders -------------------------------------------------------------
 
@@ -92,8 +97,8 @@ func merge(maps ...map[string]any) map[string]any {
 	return out
 }
 
-func op(tag, summary string) map[string]any {
-	return obj("tags", []string{tag}, "summary", summary)
+func op(id, tag, summary string) map[string]any {
+	return obj("operationId", id, "tags", []string{tag}, "summary", summary)
 }
 
 func pathParams(names ...string) []any {
@@ -241,30 +246,30 @@ func openAPI() map[string]any {
 	tableParam := pathParams("t")
 
 	paths := obj(
-		"/api/health", obj("get", merge(op("System", "Health check (public)"), obj(
+		"/api/health", obj("get", merge(op("getHealth", "System", "Health check (public)"), obj(
 			"security", []any{},
 			"responses", response("200", "OK", obj("type", "object", "properties", obj("status", obj("type", "string")))),
 		))),
 		"/api/branding", obj(
-			"get", merge(op("Admin", "White-label branding (public)"), obj(
+			"get", merge(op("getBranding", "Admin", "White-label branding (public)"), obj(
 				"security", []any{},
 				"responses", response("200", "OK", sref("Branding")),
 			)),
-			"patch", merge(op("Admin", "Set branding override (admin)"), obj(
+			"patch", merge(op("updateBranding", "Admin", "Set branding override (admin)"), obj(
 				"requestBody", merge(obj("required", true), jsonResponse(sref("Branding"))),
 				"responses", merge(
 					response("200", "Effective branding", sref("Branding")),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden"),
 				),
 			)),
-			"delete", merge(op("Admin", "Reset branding to startup flags (admin)"), obj(
+			"delete", merge(op("resetBranding", "Admin", "Reset branding to startup flags (admin)"), obj(
 				"responses", merge(
 					response("200", "Effective branding", sref("Branding")),
 					refs("401", "Unauthorized", "403", "Forbidden"),
 				),
 			)),
 		),
-		"/api/login", obj("post", merge(op("Auth", "Human login - rate-limited, agents should use API keys instead"), obj(
+		"/api/login", obj("post", merge(op("login", "Auth", "Human login - rate-limited, agents should use API keys instead"), obj(
 			"security", []any{},
 			"requestBody", requestBody(obj(
 				"type", "object",
@@ -281,17 +286,17 @@ func openAPI() map[string]any {
 				errResponse("429", "Too many attempts from this IP"),
 			),
 		))),
-		"/api/logout", obj("post", merge(op("Auth", "Revoke the current session"), obj(
+		"/api/logout", obj("post", merge(op("logout", "Auth", "Revoke the current session"), obj(
 			"responses", merge(plain("200", "OK"), refs("401", "Unauthorized")),
 		))),
 		"/api/tables", obj(
-			"get", merge(op("Tables", "List tables"), obj(
+			"get", merge(op("listTables", "Tables", "List tables"), obj(
 				"responses", merge(
 					response("200", "OK", obj("type", "array", "items", sref("Table"))),
 					refs("401", "Unauthorized"),
 				),
 			)),
-			"post", merge(op("Tables", "Create an empty table (admin)"), obj(
+			"post", merge(op("createTable", "Tables", "Create an empty table (admin)"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj("name", obj("type", "string"), "columns", obj("type", "array", "items", sref("Column"))),
@@ -306,7 +311,7 @@ func openAPI() map[string]any {
 		),
 		"/api/tables/{t}", obj(
 			"parameters", tableParam,
-			"patch", merge(op("Tables", "Rename table (admin)"), obj(
+			"patch", merge(op("renameTable", "Tables", "Rename table (admin)"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj("name", obj("type", "string")),
@@ -318,14 +323,14 @@ func openAPI() map[string]any {
 					errResponse("409", "A table with the new name already exists"),
 				),
 			)),
-			"delete", merge(op("Tables", "Drop table and all rows (admin)"), obj(
+			"delete", merge(op("deleteTable", "Tables", "Drop table and all rows (admin)"), obj(
 				"responses", merge(plain("200", "OK"),
 					refs("401", "Unauthorized", "403", "Forbidden", "404", "NotFound")),
 			)),
 		),
 		"/api/tables/{t}/columns", obj(
 			"parameters", tableParam,
-			"post", merge(op("Tables", "Add a column (admin)"), obj(
+			"post", merge(op("addColumn", "Tables", "Add a column (admin)"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj("name", obj("type", "string"), "type", obj("type", "string", "enum", strEnum)),
@@ -340,7 +345,7 @@ func openAPI() map[string]any {
 		),
 		"/api/tables/{t}/columns/{col}", obj(
 			"parameters", pathParams("t", "col"),
-			"patch", merge(op("Tables", "Rename a column and/or change its type (admin)"), obj(
+			"patch", merge(op("updateColumn", "Tables", "Rename a column and/or change its type (admin)"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj(
@@ -355,7 +360,7 @@ func openAPI() map[string]any {
 					errResponse("409", "A column with the new name already exists"),
 				),
 			)),
-			"delete", merge(op("Tables", "Drop a column and its values from every row (admin)"), obj(
+			"delete", merge(op("deleteColumn", "Tables", "Drop a column and its values from every row (admin)"), obj(
 				"responses", merge(
 					response("200", "OK", sref("ColumnList")),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
@@ -364,26 +369,23 @@ func openAPI() map[string]any {
 		),
 		"/api/tables/{t}/rows", obj(
 			"parameters", tableParam,
-			"get", merge(op("Rows", "List rows (paginated, searchable, sortable)"), obj(
+			"get", merge(op("listRows", "Rows", "List rows (paginated, searchable, sortable)"), obj(
+				"description", "Any column name is also a query parameter: a case-insensitive contains-filter on that column (e.g. email=user001). A value may start with an operator: eq:/ne: (exact), lt:/lte:/gt:/gte: (number, date, datetime columns; e.g. qty=lt:5), contains: (the default, spelled out). Repeat a column for a range (qty=gte:5&qty=lt:10); repeated plain values must all match too. An operand col:<name> compares with that column of the same row (qty=lt:col:reorder_level; both columns of one type). All filters must match. Each table also has typed paths (/api/tables/<name>/rows) with one parameter per column.",
 				"parameters", []any{
 					obj("name", "limit", "in", "query", "schema", obj("type", "integer", "default", 50, "maximum", 1000), "description", "page size"),
 					obj("name", "offset", "in", "query", "schema", obj("type", "integer", "default", 0)),
 					queryParam("q", "case-insensitive contains-match across all columns"),
 					obj("name", "sort", "in", "query", "schema", obj("type", "string"), "description", "column name to sort by"),
 					obj("name", "order", "in", "query", "schema", obj("type", "string", "enum", []string{"asc", "desc"}, "default", "asc")),
-					obj("name", "{col}", "in", "query", "style", "form", "schema", obj("type", "string"),
-						"description", "any column name as a query param = case-insensitive contains-filter on that column (e.g. email=user001). A value may start with an operator: eq:/ne: (exact), lt:/lte:/gt:/gte: (number, date, datetime columns; e.g. qty=lt:5), contains: (the default, spelled out). Repeat a column for a range (qty=gte:5&qty=lt:10); repeated plain values must all match too. An operand col:<name> compares with that column of the same row (qty=lt:col:reorder_level; both columns of one type). All filters must match"),
 				},
 				"responses", merge(
 					response("200", "OK", sref("RowsPage")),
 					refs("400", "BadRequest", "401", "Unauthorized", "404", "NotFound"),
 				),
 			)),
-			"post", merge(op("Rows", "Create a row (editor+)"), obj(
-				"requestBody", obj("required", true, "content", obj("application/json", merge(
-					obj("schema", sref("Row")),
-					obj("description", "column values; validated against column types"),
-				))),
+			"post", merge(op("createRow", "Rows", "Create a row (editor+)"), obj(
+				"requestBody", obj("required", true, "description", "column values; validated against column types",
+					"content", obj("application/json", obj("schema", sref("Row")))),
 				"responses", merge(
 					response("201", "Created row (with id)", sref("Row")),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
@@ -392,27 +394,27 @@ func openAPI() map[string]any {
 		),
 		"/api/tables/{t}/rows/{id}", obj(
 			"parameters", pathParams("t", "id"),
-			"get", merge(op("Rows", "Get one row"), obj(
+			"get", merge(op("getRow", "Rows", "Get one row"), obj(
 				"responses", merge(
 					response("200", "OK", sref("Row")),
 					refs("401", "Unauthorized", "404", "NotFound"),
 				),
 			)),
-			"patch", merge(op("Rows", "Partial update of a row (editor+). Send only the columns to change; a number column may take {\"inc\": n} instead of a value to add n to the stored number atomically (negative to subtract), e.g. {\"qty\": {\"inc\": -1}}"), obj(
+			"patch", merge(op("updateRow", "Rows", "Partial update of a row (editor+). Send only the columns to change; a number column may take {\"inc\": n} instead of a value to add n to the stored number atomically (negative to subtract), e.g. {\"qty\": {\"inc\": -1}}"), obj(
 				"requestBody", requestBody(sref("RowPatch")),
 				"responses", merge(
 					plain("200", "Updated row"),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden", "404", "NotFound"),
 				),
 			)),
-			"delete", merge(op("Rows", "Delete a row (editor+)"), obj(
+			"delete", merge(op("deleteRow", "Rows", "Delete a row (editor+)"), obj(
 				"responses", merge(plain("200", "OK"),
 					refs("401", "Unauthorized", "403", "Forbidden", "404", "NotFound")),
 			)),
 		),
 		"/api/tables/{t}/export", obj(
 			"parameters", tableParam,
-			"get", merge(op("Import/Export", "Download the table as .xlsx"), obj(
+			"get", merge(op("exportTable", "Import/Export", "Download the table as .xlsx"), obj(
 				"responses", merge(
 					map[string]any{"200": obj("description", "xlsx file", "content", map[string]any{
 						"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": obj(),
@@ -421,7 +423,7 @@ func openAPI() map[string]any {
 				),
 			)),
 		),
-		"/api/import", obj("post", merge(op("Import/Export", "Import .xlsx files (admin)"), obj(
+		"/api/import", obj("post", merge(op("importXlsx", "Import/Export", "Import .xlsx files (admin)"), obj(
 			"requestBody", obj("required", true, "content", obj("multipart/form-data", obj("schema", obj(
 				"type", "object",
 				"properties", obj(
@@ -437,13 +439,13 @@ func openAPI() map[string]any {
 			),
 		))),
 		"/api/users/", obj(
-			"get", merge(op("Users", "List users (admin)"), obj(
+			"get", merge(op("listUsers", "Users", "List users (admin)"), obj(
 				"responses", merge(
 					response("200", "OK", obj("type", "array", "items", sref("User"))),
 					refs("401", "Unauthorized", "403", "Forbidden"),
 				),
 			)),
-			"post", merge(op("Users", "Create a user (admin)"), obj(
+			"post", merge(op("createUser", "Users", "Create a user (admin)"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj(
@@ -468,11 +470,11 @@ func openAPI() map[string]any {
 		),
 		"/api/users/{name}", obj(
 			"parameters", pathParams("name"),
-			"delete", merge(op("Users", "Delete a user and their sessions (admin)"), obj(
+			"delete", merge(op("deleteUser", "Users", "Delete a user and their sessions (admin)"), obj(
 				"responses", merge(plain("200", "OK"),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden")),
 			)),
-			"patch", merge(op("Users", "Change a user's password (revokes that user's sessions) and/or role (admin)"), obj(
+			"patch", merge(op("updateUser", "Users", "Change a user's password (revokes that user's sessions) and/or role (admin)"), obj(
 				"security", []any{obj("bearerAuth", []any{})},
 				"requestBody", requestBody(obj(
 					"type", "object",
@@ -488,13 +490,13 @@ func openAPI() map[string]any {
 			)),
 		),
 		"/api/keys/", obj(
-			"get", merge(op("API keys", "List API keys - never includes full keys (admin)"), obj(
+			"get", merge(op("listApiKeys", "API keys", "List API keys - never includes full keys (admin)"), obj(
 				"responses", merge(
 					response("200", "OK", obj("type", "array", "items", sref("ApiKeyInfo"))),
 					refs("401", "Unauthorized", "403", "Forbidden"),
 				),
 			)),
-			"post", merge(op("API keys", "Create an API key (admin) - the full key is returned only in this response"), obj(
+			"post", merge(op("createApiKey", "API keys", "Create an API key (admin) - the full key is returned only in this response"), obj(
 				"requestBody", requestBody(obj(
 					"type", "object",
 					"properties", obj("name", obj("type", "string"), "role", obj("type", "string", "enum", keyRoleEnum)),
@@ -515,18 +517,18 @@ func openAPI() map[string]any {
 		),
 		"/api/keys/{id}", obj(
 			"parameters", pathParams("id"),
-			"delete", merge(op("API keys", "Revoke an API key immediately (admin)"), obj(
+			"delete", merge(op("revokeApiKey", "API keys", "Revoke an API key immediately (admin)"), obj(
 				"responses", merge(plain("200", "OK"), refs("401", "Unauthorized", "403", "Forbidden")),
 			)),
 		),
-		"/api/usage", obj("get", merge(op("Admin", "Request counts (24h) and table sizes vs caps (admin)"), obj(
+		"/api/usage", obj("get", merge(op("getUsage", "Admin", "Request counts (24h) and table sizes vs caps (admin)"), obj(
 			"responses", merge(
 				response("200", "OK", sref("Usage")),
 				refs("401", "Unauthorized", "403", "Forbidden"),
 			),
 		))),
 		"/api/settings/dates", obj(
-			"get", merge(op("Admin", "How ambiguous slash dates (3/4/2026) are read: dmy or mdy (admin)"), obj(
+			"get", merge(op("getDateSettings", "Admin", "How ambiguous slash dates (3/4/2026) are read: dmy or mdy (admin)"), obj(
 				"responses", merge(
 					response("200", "OK", obj("type", "object", "properties", obj(
 						"order", obj("type", "string", "enum", []string{"dmy", "mdy"}),
@@ -536,7 +538,7 @@ func openAPI() map[string]any {
 					plain("403", "Forbidden"),
 				),
 			)),
-			"put", merge(op("Admin", "Set the ambiguous-slash-date order; takes effect immediately (admin)"), obj(
+			"put", merge(op("updateDateSettings", "Admin", "Set the ambiguous-slash-date order; takes effect immediately (admin)"), obj(
 				"requestBody", obj("required", false, "content", obj("application/json", obj("schema", obj(
 					"type", "object",
 					"properties", obj(
@@ -555,13 +557,14 @@ func openAPI() map[string]any {
 				),
 			)),
 		),
-		"/llms.txt", obj("get", merge(op("System", "Plain-text API handbook written for AI agents"), obj(
+		"/llms.txt", obj("get", merge(op("getLlmsTxt", "System", "Plain-text API handbook written for AI agents"), obj(
 			"responses", merge(
 				map[string]any{"200": obj("description", "text/plain", "content", obj("text/plain", obj()))},
 				refs("401", "Unauthorized"),
 			),
 		))),
 		"/api/audit", obj("get", merge(obj(
+			"operationId", "listAudit",
 			"summary", "Audit trail: who changed what, newest first",
 			"security", []any{obj("bearerAuth", []any{})},
 			"parameters", []any{
@@ -576,14 +579,14 @@ func openAPI() map[string]any {
 			),
 			"tags", []string{"Admin"},
 		))),
-		"/api/status", obj("get", merge(op("Admin", "Server version, uptime, data size, free disk and backup state (admin)"), obj(
+		"/api/status", obj("get", merge(op("getStatus", "Admin", "Server version, uptime, data size, free disk and backup state (admin)"), obj(
 			"responses", merge(
 				response("200", "OK", sref("Status")),
 				refs("401", "Unauthorized", "403", "Forbidden"),
 			),
 		))),
 		"/api/backup", obj("post", merge(
-			op("Admin", "Write a backup dump now (admin)"),
+			op("createBackup", "Admin", "Write a backup dump now (admin)"),
 			obj(
 				"description", "Disabled unless the server was started with -backup-dir.",
 				"responses", merge(
@@ -592,7 +595,7 @@ func openAPI() map[string]any {
 				),
 			),
 		)),
-		"/api/me", obj("get", merge(op("Auth", "Who the caller is (any role, session or API key)"), obj(
+		"/api/me", obj("get", merge(op("getMe", "Auth", "Who the caller is (any role, session or API key)"), obj(
 			"responses", merge(
 				response("200", "OK", obj("type", "object", "properties", obj(
 					"username", obj("type", "string"),
@@ -601,7 +604,7 @@ func openAPI() map[string]any {
 				refs("401", "Unauthorized"),
 			),
 		))),
-		"/api/me/password", obj("post", merge(op("Auth", "Change your own password (any role)"), obj(
+		"/api/me/password", obj("post", merge(op("changeOwnPassword", "Auth", "Change your own password (any role)"), obj(
 			"description", "Revokes every other session of the user; the calling session stays signed in.",
 			"requestBody", requestBody(obj(
 				"type", "object",
@@ -617,7 +620,7 @@ func openAPI() map[string]any {
 			),
 		))),
 		"/api/sample.xlsx", obj("get", merge(
-			op("Admin", "Generated sample workbook (admin)"),
+			op("getSampleXlsx", "Admin", "Generated sample workbook (admin)"),
 			obj(
 				"description", "A three-sheet demo file (Products, Customers, Orders) to import when there is no spreadsheet at hand.",
 			),
@@ -672,6 +675,16 @@ func (sv *Server) OpenAPISpec(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
+	tables, err := sv.store.ListTables()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	body, err := specJSON(tables)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(openapiJSON)
+	_, _ = w.Write(body)
 }

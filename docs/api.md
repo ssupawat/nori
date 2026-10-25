@@ -63,7 +63,9 @@ GET    /api/audit?table=&rowId=&user=&limit=   who changed what, newest first   
                                actions: create_row, update_row, delete_row, create_table,
                                import, login, login_failed (with client IP), ...; writes made with an
                                API key carry "key:<name>" (key names are unique)
-GET    /openapi.json            OpenAPI 3.1 spec of the whole API (login required)
+GET    /openapi.json            OpenAPI 3.1 spec of the whole API (login required); every operation has an
+                               operationId, and each table gets typed paths (/api/tables/<name>/rows)
+                               with its column types and one filter parameter per column
 GET    /llms.txt                plain-text handbook written for AI agents (login required)
 ```
 
