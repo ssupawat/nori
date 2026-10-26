@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -47,6 +48,7 @@ func main() {
 	pprofAddr := flag.String("pprof", "", "serve pprof debug endpoints on this address (e.g. 127.0.0.1:6060)")
 	trace := flag.Bool("trace", false, "log per-stage API timings (chain/auth/handler/total)")
 	trustProxy := flag.Bool("trust-proxy", false, "trust X-Forwarded-For for client IPs (enable behind a reverse proxy)")
+	rateLimit := flag.String("rate-limit", envOr("RATE_LIMIT", "240"), "max API requests per visitor per minute (0 = unlimited)")
 	backupDir := flag.String("backup-dir", "", "directory for scheduled JSON dumps (empty = disabled)")
 	backupEvery := flag.Duration("backup-every", 24*time.Hour, "time between scheduled dumps")
 	backupKeep := flag.Int("backup-keep", 7, "number of scheduled dumps to keep")
@@ -89,6 +91,11 @@ func main() {
 			log.Printf("close store: %v", err)
 		}
 	}()
+
+	rateLimitN, err := strconv.Atoi(*rateLimit)
+	if err != nil || rateLimitN < 0 {
+		log.Fatalf("invalid -rate-limit %q", *rateLimit)
+	}
 
 	startedAt := time.Now()
 	// last scheduled/shutdown dump outcome, surfaced by GET /api/status
@@ -178,7 +185,7 @@ func main() {
 		Tagline: *brandTagline,
 		Color:   *brandColor,
 		LogoURL: *brandLogo,
-	}).WithTrace(*trace).WithTrustProxy(*trustProxy).WithStatus(func() *api.Status {
+	}).WithTrace(*trace).WithTrustProxy(*trustProxy).WithRateLimit(rateLimitN).WithStatus(func() *api.Status {
 		st := &api.Status{
 			Version:       version,
 			UptimeSeconds: int64(time.Since(startedAt).Seconds()),

@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 
 	"nori/internal/auth"
 	"nori/internal/store"
@@ -26,6 +27,7 @@ type Server struct {
 	usage        *usageTracker
 	audit        *auditLog
 	trace        bool // log per-stage timings (auth / handler / total)
+	rateLimit    int  // max API requests per visitor per minute; 0 = unlimited
 	// statusProvider fills GET /api/status; main installs a closure over
 	// its version, uptime, data dir and backup state
 	statusProvider func() *Status
@@ -57,6 +59,35 @@ func (sv *Server) WithTrace(on bool) *Server {
 	return sv
 }
 
+// WithRateLimit caps API requests per visitor per minute (0 = unlimited).
+func (sv *Server) WithRateLimit(perMinute int) *Server {
+	sv.rateLimit = perMinute
+	return sv
+}
+
+// rateLimit returns the middleware capping API requests per visitor.
+// /api/health is exempt (machine probes must never 429).
+func (sv *Server) rateLimitMW() func(http.Handler) http.Handler {
+	if sv.rateLimit <= 0 {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	limited := httprate.LimitBy(sv.rateLimit, time.Minute,
+		func(r *http.Request) (string, error) { return clientIP(r), nil },
+		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+	return func(next http.Handler) http.Handler {
+		limitedMW := limited(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/health" || r.URL.Path == "/health" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			limitedMW.ServeHTTP(w, r)
+		})
+	}
+}
+
 // WithTrustProxy enables X-Forwarded-For client IP detection (rate
 // limiting keys per visitor behind a reverse proxy).
 func (sv *Server) WithTrustProxy(on bool) *Server {
@@ -85,7 +116,7 @@ func (sv *Server) WithBranding(b Branding) *Server {
 
 func (sv *Server) Routes() http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.Logger, middleware.Recoverer, cors, sv.trackUsage, sv.traceStage)
+	r.Use(middleware.Logger, middleware.Recoverer, cors, sv.rateLimitMW(), sv.trackUsage, sv.traceStage)
 
 	// stored branding overrides (set from the dashboard) win over flags
 	if vals, ok, err := sv.store.GetSetting("branding"); err == nil && ok {
