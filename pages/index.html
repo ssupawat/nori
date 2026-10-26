@@ -206,12 +206,11 @@
       <p class="lede">One process over one file, durable on every write. That is the whole deployment.</p>
       <ol class="steps">
         <li><b>Run it</b>
-          <p>Start the binary with a data directory and an admin password.</p></li>
+          <p>One binary, one command. Try it on the <a href="https://demo.runnori.com" target="_blank" rel="noopener">live demo</a> first if you like.</p></li>
         <li><b>Import an .xlsx</b>
-          <p>Every sheet becomes a table. Column types are detected and every value is validated from then on.</p></li>
+          <p>Every sheet becomes a table. The demo's clinic workbook is a real example.</p></li>
         <li><b>Build on the API</b>
-          <p>Humans get sessions, machines get revocable API keys, and the docs are written for
-          your coding agents: Claude Code, Cursor, Codex.</p></li>
+          <p>REST with sessions, roles, and revocable keys — try a real query below. The docs are written for your coding agents: Claude Code, Cursor, Codex.</p></li>
       </ol>
       <div class="play">
         <div class="req"><span class="m">GET</span>&nbsp;/api/tables/Orders/rows<span id="p-qs"></span></div>
@@ -242,29 +241,7 @@
       <h2>Where nori fits</h2>
       <p class="lede">Small teams run on workbooks: a few sheets, one per subject. Imported,
       the workbook runs the place:</p>
-      <p class="storylabel">A bakery</p>
-      <div class="story">
-        <div class="pane">
-          <div class="tabs">
-            <span class="fname">orders.xlsx</span>
-            <span class="tab">Customers</span>
-            <span class="tab">Products</span>
-            <span class="tab on">Orders</span>
-          </div>
-          <table>
-            <tr><th>order id</th><th>customer</th><th>product</th><th>total</th><th>status</th></tr>
-            <tr><td>ORD-1001</td><td>Som Smith</td><td>Dark Croissant 080</td><td>1250.75</td><td>shipped</td></tr>
-            <tr><td>ORD-1002</td><td>Win Tanaka</td><td>Fresh Coffee 091</td><td>450</td><td>refunded</td></tr>
-          </table>
-        </div>
-        <div class="via"><b>&rarr;</b>import</div>
-        <ul class="serves">
-          <li><b>Counter staff</b><span>Update the status column in the dashboard. One account each, every write audited.</span></li>
-          <li><b>Shop website</b><span>Reads the day's queue: <code>GET /api/tables/Orders/rows</code></span></li>
-          <li><b>Delivery app</b><span>Marks orders delivered through the API with its own revocable key.</span></li>
-        </ul>
-      </div>
-      <p class="storylabel follow">A small hospital ward</p>
+      <p class="storylabel">A small hospital ward</p>
       <div class="story stack">
         <div class="pane">
           <div class="tabs">
