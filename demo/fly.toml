@@ -8,6 +8,7 @@ primary_region = "sin"
 
 [env]
   GOMEMLIMIT = "180MiB"
+  RATE_LIMIT = "60"
 
 [mounts]
   source = "nori_demo_data"
