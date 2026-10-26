@@ -32,6 +32,5 @@ done
 ONEOFF=$($FLY machines list -a "$APP" -j | jq -r '.[0].id')
 $FLY machine destroy "$ONEOFF" -a "$APP" --force
 
-$FLY deploy -a "$APP" -c demo/fly.toml --dockerfile Dockerfile.flyio \
-  --build-arg NORI_VERSION=v0.2.0 --build-arg NORI_ARCH=amd64 >/dev/null
+$FLY deploy -a "$APP" --image "$IMAGE" -c demo/fly.toml >/dev/null
 echo "demo reset"
