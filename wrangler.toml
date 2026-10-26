@@ -1,0 +1,5 @@
+name = "nori"
+
+[assets]
+directory = "./pages"
+not_found_handling = "404-page"
