@@ -76,9 +76,6 @@
     padding:18px 20px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
     font-size:13.5px;overflow-x:auto;line-height:1.7;margin:0 0 10px}
   pre.code .c{color:var(--soft)}
-  .facts{display:flex;flex-wrap:wrap;gap:10px 26px;margin:14px 0 0;padding:0;list-style:none;
-    font-size:13px;color:var(--muted)}
-  .facts b{color:var(--ink)}
   .story{display:grid;grid-template-columns:1.2fr 30px 1fr;gap:14px;align-items:start}
   .story .via{align-self:center;text-align:center;font-size:12px;color:var(--soft)}
   .story .via b{display:block;font-size:18px;font-weight:400}
@@ -304,13 +301,6 @@ ADMIN_PASS=secret ./nori -addr :8080 -data ./data
 <span class="c"># open http://localhost:8080, sign in as admin,
 # then import an .xlsx. Every sheet becomes a table</span></pre>
       <p class="friction">Prefer building yourself? <b>go build</b> works too, and a Dockerfile is included.</p>
-      <ul class="facts">
-        <li><b>~125ms</b> to search a full 200,000-row table</li>
-        <li><b>~110s</b> to import it, <b>&lt;8s</b> to export it</li>
-        <li><b>fsync</b> on every write</li>
-        <li><b>200,000</b> rows per table, stated up front</li>
-          <li><b>1GB</b> RAM carries the full cap; plan less and nori tells you at startup</li>
-      </ul>
     </div>
   </section>
 </main>
