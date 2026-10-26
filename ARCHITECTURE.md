@@ -13,7 +13,7 @@ place.
 ```mermaid
 flowchart LR
     sheet["sheet.xlsx"] -- import --> api
-    subgraph nori["nori - one binary"]
+    subgraph nori["nori: one binary"]
         direction LR
         api["CRUD API"] --> db[("data.db, strings only")]
     end
@@ -32,7 +32,7 @@ flowchart LR
   real database.
 - **Whole-table rewrites are crash-safe.** A replace-import, column
   rename or table rename builds the new dataset in a staging collection
-  with a manifest, and boot replays or abandons the pending swap - the
+  with a manifest, and boot replays or abandons the pending swap: the
   old table survives unless the new data is complete
   (`internal/store/rows.go`).
 
@@ -63,7 +63,7 @@ flowchart LR
   route is missing from the spec; llms.txt points at it. Each request
   adds typed paths for the tables that exist then
   (`internal/api/openapi.go`, `internal/api/openapi_tables.go`).
-- **Stated limits.** 200,000 rows, 256 columns, 64MB imports - stated in
+- **Stated limits.** 200,000 rows, 256 columns, 64MB imports, stated in
   /api/usage, the dashboard, llms.txt and README. Raising one means
   updating every place it is stated (`internal/store/types.go`).
 - **Humans get sessions, machines get keys.** Login damps guesses and
@@ -71,7 +71,7 @@ flowchart LR
   new); editor and viewer accounts are API identities. New API keys
   default to builder: the schema without the rows (`internal/auth/auth.go`).
 - **Every change is attributable.** Updates record the changed fields,
-  deletes keep the full row, keys record `key:<name>` - and while
+  deletes keep the full row, keys record `key:<name>`, and while
   flushes fail, events drop with a count instead of silently vanishing
   (`internal/api/audit.go`).
 - **The dump keeps the engine replaceable.** Scheduled and once on
