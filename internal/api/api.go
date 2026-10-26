@@ -74,6 +74,7 @@ func (sv *Server) rateLimitMW() func(http.Handler) http.Handler {
 	limited := httprate.LimitBy(sv.rateLimit, time.Minute,
 		func(r *http.Request) (string, error) { return clientIP(r), nil },
 		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", "60")
 			w.WriteHeader(http.StatusTooManyRequests)
 		}))
 	return func(next http.Handler) http.Handler {

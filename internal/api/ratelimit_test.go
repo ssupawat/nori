@@ -126,3 +126,23 @@ func TestRateLimitDisabledByDefault(t *testing.T) {
 		}
 	}
 }
+
+// The 429 tells clients when to come back: a machine-readable Retry-After
+// header, zero body bytes (the egress fuse stays intact).
+func TestRateLimitSetsRetryAfter(t *testing.T) {
+	h := newRateLimitServer(t, 2)
+	flood(t, h, 3, "192.0.2.10:1000") // trip the limit
+	req := httptest.NewRequest(http.MethodGet, "/api/tables", nil)
+	req.RemoteAddr = "192.0.2.10:1000"
+	res := httptest.NewRecorder()
+	h.ServeHTTP(res, req)
+	if res.Code != http.StatusTooManyRequests {
+		t.Fatalf("got %d, want 429", res.Code)
+	}
+	if ra := res.Header().Get("Retry-After"); ra != "60" {
+		t.Fatalf("Retry-After = %q, want 60", ra)
+	}
+	if res.Body.Len() > 0 {
+		t.Fatalf("429 body must stay empty, got %d bytes", res.Body.Len())
+	}
+}

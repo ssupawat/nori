@@ -26,7 +26,8 @@ export async function api(path, options = {}) {
     throw new ApiError("Session expired, please sign in again", 401);
   }
   if (!res.ok) {
-    throw new ApiError(body?.error || res.statusText, res.status);
+    const message = res.status === 429 ? "Too many requests - retry in a minute" : body?.error || res.statusText;
+    throw new ApiError(message, res.status);
   }
   return body;
 }
