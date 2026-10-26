@@ -73,7 +73,7 @@ GET    /llms.txt                plain-text handbook written for AI agents (login
 
 - **Humans** sign in with username/password (min 8 chars) and get a 7-day **sliding** session: it renews on use, so re-login only happens after a full week of inactivity. Browser frontends never embed credentials - they show a login form and use the human's session token.
 - **Machines** (AI agents, server-side scripts, cron jobs) use **API keys**: `nri_<hex>`, no expiry, revocable anytime, role attached (builder/viewer/editor/admin; new keys default to builder, which never sees a row). Created on the Access page (admin only); the full key is shown once and only its SHA-256 hash is stored. Same `Authorization: Bearer nri_...` header. Never ship a key inside browser frontend code.
-- `POST /api/login` is rate-limited per IP (10 attempts/minute → 429). Deploy behind TLS - tokens travel in plain headers otherwise. Rate limiting counts by client IP: directly exposed, that is RemoteAddr; behind a reverse proxy start with `-trust-proxy` so it counts visitors (X-Forwarded-For) instead of the proxy.
+- `POST /api/login` is rate-limited per IP (10 attempts/minute → 429). Deploy behind TLS - tokens travel in plain headers otherwise. The visitor IP is detected automatically: on Fly.io it comes from `Fly-Client-IP` (and from `CF-Connecting-IP` when the request transited Cloudflare); directly exposed anywhere else it is RemoteAddr; behind your own reverse proxy start with `-trust-proxy` so it counts visitors (`X-Forwarded-For`) instead of the proxy.
 
 ## Updating a number in place
 

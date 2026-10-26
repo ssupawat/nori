@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -35,6 +37,9 @@ func loginRateLimit(next http.Handler) http.Handler {
 }
 
 func clientIP(r *http.Request) string {
+	if ip := platformIP(r); ip != "" {
+		return ip
+	}
 	if trustProxy {
 		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
 			return strings.TrimSpace(strings.Split(fwd, ",")[0])
@@ -45,6 +50,36 @@ func clientIP(r *http.Request) string {
 		return addr[:i]
 	}
 	return addr
+}
+
+// platformIP returns the visitor IP vouched for by the platform proxy,
+// when the connection provably came from it. On Fly, the edge sets
+// Fly-Client-IP; when that address is one of Cloudflare's, the request
+// transited Cloudflare and CF-Connecting-IP is the real visitor.
+func platformIP(r *http.Request) string {
+	if os.Getenv("FLY_APP_NAME") == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !flyInternal(host) {
+		return ""
+	}
+	fly := strings.TrimSpace(r.Header.Get("Fly-Client-IP"))
+	if fly == "" {
+		return ""
+	}
+	if cf := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cf != "" && isCloudflareIP(fly) {
+		return cf
+	}
+	return fly
+}
+
+// flyInternal reports whether addr is one of Fly's internal proxy
+// addresses (ULA fd00::/8), i.e. the connection provably arrived
+// through Fly's edge.
+func flyInternal(addr string) bool {
+	ip := net.ParseIP(addr)
+	return ip != nil && ip.To4() == nil && ip.IsPrivate()
 }
 
 func (sv *Server) createKey(w http.ResponseWriter, r *http.Request) {
