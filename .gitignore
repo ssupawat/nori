@@ -25,3 +25,6 @@ ui/dist/*
 
 # local stress-test rig (xlsx, containers, load-test artifacts)
 /stress-run/
+
+# pi project config (symlinked into pi-config)
+.pi/
