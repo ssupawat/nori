@@ -384,7 +384,7 @@
                 </span>
               {/if}
             </div>
-            <div class="hidden text-xs text-zinc-500 md:block">{u.createdAt ? ago(u.createdAt) : "—"}</div>
+            <div class="hidden text-xs text-zinc-500 md:block">{u.createdAt ? ago(u.createdAt) : ""}</div>
             <div class="justify-self-end">
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" aria-label="Actions for {u.username}">

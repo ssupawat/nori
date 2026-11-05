@@ -12,7 +12,7 @@ import (
 // Column types are hints over the string storage: text values are stored
 // verbatim, numbers and dates are normalized to canonical strings so that
 // sorting and validation behave. datetime values are canonical UTC
-// (RFC3339 with the Z suffix) — the backend never touches any other zone;
+// (RFC3339 with the Z suffix), the backend never touches any other zone;
 // clients convert to local for display.
 const (
 	TypeText     = "text"
@@ -34,7 +34,7 @@ type Column struct {
 	Type string `json:"type" clover:"type"`
 }
 
-// Unambiguous layouts — day and month are never both small.
+// Unambiguous layouts, day and month are never both small.
 var fixedDateLayouts = []string{
 	"2006-01-02",
 	time.RFC3339,
@@ -100,7 +100,7 @@ func (s *Store) NormalizeColumn(colType, raw string) (string, error) {
 	case TypeNumber:
 		cleaned := strings.ReplaceAll(v, ",", "")
 		// values with a leading zero ("0812...", "007") are codes and
-		// phone numbers, not numbers — keep them as text
+		// phone numbers, not numbers, keep them as text
 		if s := strings.TrimLeft(cleaned, "+-"); len(s) > 1 && s[0] == '0' && s[1] >= '0' && s[1] <= '9' {
 			return "", fmt.Errorf("%q looks like a code (leading zero), not a number", raw)
 		}
@@ -108,12 +108,12 @@ func (s *Store) NormalizeColumn(colType, raw string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("%q is not a number", raw)
 		}
-		// strconv accepts "NaN" and "Inf" — those are not cell values
+		// strconv accepts "NaN" and "Inf", those are not cell values
 		if math.IsNaN(f) || math.IsInf(f, 0) {
 			return "", fmt.Errorf("%q is not a finite number", raw)
 		}
 		// whole numbers at 16+ digits no longer round-trip a float64
-		// exactly — keep them as text instead of corrupting the value
+		// exactly, keep them as text instead of corrupting the value
 		if f == math.Trunc(f) && math.Abs(f) >= 1e15 {
 			return "", fmt.Errorf("%q has too many digits to be a number", raw)
 		}

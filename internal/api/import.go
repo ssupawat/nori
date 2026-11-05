@@ -18,7 +18,7 @@ var MaxImportBytes int64 = 64 << 20
 var errStopImport = errors.New("stop import")
 
 func (sv *Server) importXlsx(w http.ResponseWriter, r *http.Request) {
-	// imports are heavy and rare — serialize them so concurrent
+	// imports are heavy and rare, serialize them so concurrent
 	// mode=replace imports of one table cannot race on staging
 	sv.importMu.Lock()
 	defer sv.importMu.Unlock()
