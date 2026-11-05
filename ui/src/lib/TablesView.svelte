@@ -343,7 +343,7 @@
     showToast(
       newCol !== oldCol
         ? `Renamed to ${newCol}`
-        : `Column type set to ${newType}${convert ? " - values converted" : ""}`
+        : `Column type set to ${newType}${convert ? ", values converted" : ""}`
     );
     await refreshTables();
     loadRows();
@@ -414,7 +414,7 @@
         method: "POST",
         body: JSON.stringify(data),
       });
-      showToast("Row duplicated - added at the end");
+      showToast("Row duplicated, added at the end");
       loadRows();
     } catch (err) {
       showToast(err.message, "error");
@@ -538,7 +538,7 @@
     await Promise.all(Array.from({ length: Math.min(5, n) }, worker));
     deleting = false;
     if (ok === n) showToast(`Deleted ${n.toLocaleString()} row${n === 1 ? "" : "s"}`);
-    else showToast(`Deleted ${ok.toLocaleString()} of ${n.toLocaleString()} rows - ${n - ok} failed: ${firstErr}`, "error");
+    else showToast(`Deleted ${ok.toLocaleString()} of ${n.toLocaleString()} rows. ${n - ok} failed: ${firstErr}`, "error");
     loadRows();
   }
 
