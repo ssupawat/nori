@@ -149,7 +149,7 @@
 
   function downloadCreds() {
     const text = [
-      `${branding.name} - your login`,
+      `${branding.name}: your login`,
       "",
       `Username: ${creds.username}`,
       `Password: ${creds.password}`,
@@ -183,7 +183,7 @@
       method: "PATCH",
       body: JSON.stringify({ password: v }),
     });
-    showToast(`Password changed for ${passTarget} - their sessions were signed out`);
+    showToast(`Password changed for ${passTarget}. Their sessions were signed out`);
   }
 
   let roleOpen = $state(false);
@@ -384,7 +384,7 @@
                 </span>
               {/if}
             </div>
-            <div class="hidden text-xs text-zinc-500 md:block">{u.createdAt ? ago(u.createdAt) : "—"}</div>
+            <div class="hidden text-xs text-zinc-500 md:block">{u.createdAt ? ago(u.createdAt) : ""}</div>
             <div class="justify-self-end">
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger class="rounded p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" aria-label="Actions for {u.username}">
@@ -464,7 +464,7 @@
     </ul>
   </div>
   {#if tab === "keys"}
-    <p class="mt-2 text-xs text-zinc-500">Keys are shown in full only once and stored hashed - revoke immediately if one leaks.</p>
+    <p class="mt-2 text-xs text-zinc-500">Keys are shown in full only once and stored hashed. Revoke immediately if one leaks.</p>
   {/if}
 </div>
 
@@ -518,7 +518,7 @@
         <KeyRound class="size-4" /> Create API key
       </Dialog.Title>
       <Dialog.Description class="mb-4 text-sm text-zinc-500">
-        For a script, agent or server. Never put a key in browser code - browser apps sign people in instead.
+        For a script, agent or server. Never put a key in browser code. Browser apps sign people in instead.
       </Dialog.Description>
       <form onsubmit={createKey} class="flex flex-col gap-3">
         <input class={inputCls} type="text" placeholder="Key name (e.g. my-ai-agent)" aria-label="Key name" bind:value={keyName} required />
@@ -555,7 +555,7 @@
         <LockKeyhole class="size-4" /> {creds?.username}
       </Dialog.Title>
       <Dialog.Description class="mt-1 text-sm text-zinc-600">
-        Copy this password now - it is never shown again. The login file has the username too.
+        Copy this password now. It is never shown again. The login file has the username too.
       </Dialog.Description>
       {@render secretBlock(creds?.password)}
       <div class="mt-3 flex flex-wrap justify-end gap-2">
@@ -587,7 +587,7 @@
         <KeyRound class="size-4" /> {newKey?.name}
       </Dialog.Title>
       <Dialog.Description class="mt-1 text-sm text-zinc-600">
-        Copy this key now - it is never shown again.
+        Copy this key now. It is never shown again.
       </Dialog.Description>
       {@render secretBlock(newKey?.key)}
       <div class="mt-3 flex justify-end gap-2">
@@ -609,7 +609,7 @@
   bind:open={passOpen}
   bind:value={passValue}
   title={`Set password for ${passTarget}`}
-  label="Min 8 characters - changing it signs that user out everywhere."
+  label="Min 8 characters. Changing it signs that user out everywhere."
   password
   minLength={8}
   submitLabel="Set password"

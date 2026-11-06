@@ -312,7 +312,7 @@
             <span class="flex items-center gap-0.5 {types[j] === 'number' ? 'flex-row-reverse justify-start' : ''}">
               <button
                 class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-zinc-100 hover:text-zinc-900"
-                title={sort === col ? (order === "asc" ? `Sorted by ${col} ascending - click for descending` : `Sorted by ${col} descending - click to clear`) : `Sort by ${col}`}
+                title={sort === col ? (order === "asc" ? `Sorted by ${col} ascending, click for descending` : `Sorted by ${col} descending, click to clear`) : `Sort by ${col}`}
                 onclick={() => onsort(col)}
               >
                 {col}

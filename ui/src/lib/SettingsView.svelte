@@ -5,6 +5,8 @@
   import { askConfirm } from "./confirm.svelte.js";
   import LockKeyhole from "@lucide/svelte/icons/lock-keyhole";
   import Palette from "@lucide/svelte/icons/palette";
+  import LogIn from "@lucide/svelte/icons/log-in";
+  import Eye from "@lucide/svelte/icons/eye";
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { Select } from "bits-ui";
@@ -55,7 +57,7 @@
       currentPw = "";
       newPw = "";
       confirmPw = "";
-      showToast("Password changed - other sessions were signed out");
+      showToast("Password changed. Other sessions were signed out");
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -196,28 +198,37 @@
   <!-- live preview of the login page, bound to the unsaved form state -->
   <div class="flex flex-col rounded-lg border border-zinc-200 bg-white p-4">
     <div class="mb-3 text-sm font-semibold">Login preview</div>
-    <div class="flex flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50/60 p-6">
-      <div class="flex flex-col items-center gap-2 text-center">
-        {#if logoUrl && !logoBroken}
-          <img src={logoUrl} alt="logo" class="size-10 rounded-lg border border-zinc-200 object-contain" onerror={() => (logoBroken = true)} />
-        {:else}
-          {#if logoUrl}
-            <span class="text-xs text-red-600">Logo URL doesn't load - showing the art mark</span>
+    <!-- mirrors Login.svelte: art panel + form card -->
+    <div class="flex flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 p-4" aria-hidden="true">
+      <div class="flex w-full max-w-md overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
+        <div class="hidden w-2/5 sm:block">
+          <GenArt seed={name || "nori"} color={colorValid ? color : undefined} variant={0} w={480} h={640} class="h-full w-full object-cover" />
+        </div>
+        <div class="flex flex-1 flex-col justify-center gap-3 p-6">
+          <div class="flex items-center justify-center gap-2 text-xl font-bold text-zinc-900">
+            {#if logoUrl && !logoBroken}
+              <img src={logoUrl} alt="" class="size-9 rounded-lg border border-zinc-200 object-contain" onerror={() => (logoBroken = true)} />
+            {:else}
+              <GenArt seed={name || "nori"} color={colorValid ? color : undefined} variant={3} w={96} h={96} class="size-9 rounded-lg border border-zinc-200" />
+            {/if}
+            {name || "your app"}
+          </div>
+          <p class="mb-2 text-center text-sm text-zinc-500">{tagline}</p>
+          {#if logoUrl && logoBroken}
+            <p class="text-center text-xs text-red-600">Logo URL doesn't load, showing the art mark</p>
           {/if}
-          <GenArt seed={name || "nori"} color={colorValid ? color : undefined} variant={3} w={64} h={64} class="size-10 rounded-lg border border-zinc-200" />
-        {/if}
-        <div class="text-lg font-bold text-zinc-900">{name || "your app"}</div>
-        {#if tagline}
-          <div class="text-xs text-zinc-500">{tagline}</div>
-        {/if}
-        <div class="mt-3 flex w-full max-w-60 flex-col gap-2">
-          <div class="h-8 rounded-lg border border-zinc-300 bg-white"></div>
-          <div class="h-8 rounded-lg border border-zinc-300 bg-white"></div>
-          <div class="bg-brand flex h-8 items-center justify-center rounded-lg text-xs font-medium text-brand-on">Sign in</div>
+          <input class={inputCls} type="text" placeholder="Username" tabindex="-1" readonly />
+          <div class="relative">
+            <input class="{inputCls} pr-10" type="password" placeholder="Password" tabindex="-1" readonly />
+            <span class="absolute top-1/2 right-1.5 -translate-y-1/2 p-1.5 text-zinc-500"><Eye class="size-4" /></span>
+          </div>
+          <div class="bg-brand mt-1 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium text-brand-on">
+            <LogIn class="size-4" /> Sign in
+          </div>
         </div>
       </div>
     </div>
-    <p class="mt-2 text-xs text-zinc-500">Updates as you type - Save applies it for everyone.</p>
+    <p class="mt-2 text-xs text-zinc-500">Updates as you type. Save applies it for everyone.</p>
   </div>
   </div>
 
@@ -265,7 +276,7 @@
       </div>
       <label class="basis-full flex items-center gap-2 text-sm">
         <input type="checkbox" class="size-4 accent-zinc-900" bind:checked={beYear} />
-        <span>Buddhist Era years (<span class="font-mono text-xs">พ.ศ.</span>) - read years ≥ 2400 as พ.ศ. and convert to CE (2567 → 2024)</span>
+        <span>Buddhist Era years (<span class="font-mono text-xs">พ.ศ.</span>): read years ≥ 2400 as พ.ศ. and convert to CE (2567 → 2024)</span>
       </label>
       <button
         class="bg-brand rounded-lg px-3 py-1.5 text-sm font-medium text-brand-on disabled:opacity-50"

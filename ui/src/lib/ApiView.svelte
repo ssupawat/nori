@@ -27,7 +27,7 @@
 <div class="w-full">
   <div class="mb-3">
     <h2 class="text-xl font-semibold tracking-tight text-zinc-900">API</h2>
-    <p class="mt-0.5 text-sm text-zinc-500">Reference for agents and scripts - keys live on the Access page, traffic and server health on the Dashboard</p>
+    <p class="mt-0.5 text-sm text-zinc-500">Reference for agents and scripts. Keys live on the Access page, traffic and server health on the Dashboard</p>
   </div>
 
   <div class={sectionCls}>

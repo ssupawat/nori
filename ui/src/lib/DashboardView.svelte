@@ -98,7 +98,7 @@
         Traffic, capacity, and server health
         <button
           class="inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50"
-          title={loadedAt ? `Updated ${loadedAt.toLocaleTimeString()} - refreshes every minute` : "Refresh"}
+          title={loadedAt ? `Updated ${loadedAt.toLocaleTimeString()}, refreshes every minute` : "Refresh"}
           aria-label="Refresh dashboard"
           disabled={refreshing}
           onclick={() => refresh()}
@@ -114,10 +114,10 @@
         <span>data <span class="font-medium text-zinc-700 tabular-nums">{bytes(status.dataBytes)}</span></span>
         {#if status.backup}
           <span>
-            backups <span class="font-medium text-zinc-700">{status.backup.lastAt ? `last ${ago(status.backup.lastAt)}` : "no dump yet"}</span>{#if status.backup.lastError}<span class="text-red-600"> - failed: {status.backup.lastError}</span>{/if}
+            backups <span class="font-medium text-zinc-700">{status.backup.lastAt ? `last ${ago(status.backup.lastAt)}` : "no dump yet"}</span>{#if status.backup.lastError}<span class="text-red-600"> (failed: {status.backup.lastError})</span>{/if}
           </span>
         {:else}
-          <span class="cursor-help text-amber-600" title="Scheduled backups are off - start nori with -backup-dir <dir> to turn them on">backups off</span>
+          <span class="cursor-help text-amber-600" title="Scheduled backups are off. Start nori with -backup-dir <dir> to turn them on">backups off</span>
         {/if}
         <button
           class="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 hover:bg-zinc-50 disabled:opacity-50"
@@ -232,11 +232,11 @@
             </div>
             {#if pct >= 100}
               <p class="mt-1.5 flex items-start gap-1.5 text-xs text-red-600">
-                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Full - new rows and imports into this table are rejected. Export is in the table menu.
+                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Full: new rows and imports into this table are rejected. Export is in the table menu.
               </p>
             {:else if pct >= 75}
               <p class="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600">
-                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Getting close to the cap - time to plan a migration. Export is in the table menu.
+                <TriangleAlert class="mt-px size-3.5 shrink-0" /> Getting close to the cap, time to plan a migration. Export is in the table menu.
               </p>
             {/if}
           </div>
@@ -267,7 +267,7 @@
           </span>
         </li>
       {:else}
-        <li class="py-2 text-xs text-zinc-500">No changes yet - edits will show up here.</li>
+        <li class="py-2 text-xs text-zinc-500">No changes yet. Edits will show up here.</li>
       {/each}
     </ul>
   </div>

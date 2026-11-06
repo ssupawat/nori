@@ -32,7 +32,7 @@
     const ok = value ? await copyText(value) : false;
     busy = false;
     if (!ok) {
-      showToast(value ? "Couldn't copy - select the text and press Ctrl/⌘+C" : "Nothing to copy yet", "error");
+      showToast(value ? "Couldn't copy. Select the text and press Ctrl/⌘+C" : "Nothing to copy yet", "error");
       return;
     }
     copied = true;

@@ -401,7 +401,7 @@ const stagingPrefix = "_staging_"
 // (used by import mode=replace). The new dataset is fully written into a
 // staging collection first; the swap then drops the old table and copies
 // staging in. If the process dies anywhere in between, Open() finishes or
-// rolls back the swap from the staging copy — the old data survives unless
+// rolls back the swap from the staging copy, the old data survives unless
 // the new data is complete enough to replace it.
 func (s *Store) ReplaceTable(name string, columns []Column, rows []map[string]string) error {
 	if strings.HasPrefix(name, "_") || strings.TrimSpace(name) == "" || !validName(name) {
@@ -465,7 +465,7 @@ func (s *Store) markSwap(name string, preserveIDs bool, from string) error {
 // finishSwap moves the staged dataset into the live table. It only runs
 // once the staging copy is complete, so a crash at any point is repaired
 // by recoverStaging on the next start. On failure it returns the error and
-// KEEPS the staging collection and the manifest, so recovery can retry —
+// KEEPS the staging collection and the manifest, so recovery can retry;
 // cleanup happens only on success. preserveIDs keeps the staged rows'
 // clover ids and seq values (used when rewriting a table in place, e.g.
 // column renames); imports pass false to mint fresh ids. A non-empty from
@@ -651,7 +651,7 @@ func (s *Store) insertAll(table string, rows []map[string]string) error {
 }
 
 // reservedDocKeys are storage-internal document keys; row data must never
-// land on them (imports rename such columns, API writes reject them — this
+// land on them (imports rename such columns, API writes reject them, this
 // guard keeps the documents consistent regardless).
 var reservedDocKeys = map[string]bool{"seq": true, "_id": true, "id": true}
 

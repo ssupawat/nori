@@ -117,7 +117,7 @@
           <span>
             <span class="block font-medium">Replace</span>
             <span class="block text-xs text-zinc-500">
-              Tables named like a sheet are dropped and rebuilt from the file - edits made here are lost.
+              Tables named like a sheet are dropped and rebuilt from the file. Edits made here are lost.
             </span>
           </span>
         </label>

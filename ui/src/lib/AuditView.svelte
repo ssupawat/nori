@@ -54,9 +54,9 @@
   // renders the same two-part structure
   const staticNotes = {
     delete_table: "table dropped with all its rows",
-    set_password: "password changed - other sessions of this user were revoked",
+    set_password: "password changed, other sessions of this user were revoked",
     create_user: "account created",
-    set_role: "role changed - applies to live sessions at once",
+    set_role: "role changed, applies to live sessions at once",
     login: "signed in",
     login_failed: "sign-in failed (wrong credentials)",
   };
@@ -148,7 +148,7 @@
                 <span class="text-zinc-500">{note}</span>
               {/if}
               {#if e.action === "delete_row"}
-                <span class="text-zinc-500">removed - full copy kept in this trail:</span>
+                <span class="text-zinc-500">removed, full copy kept in this trail:</span>
               {/if}
               {#each Object.entries(vals) as [k, v] (k)}
                 <span class="text-zinc-500">
