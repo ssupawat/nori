@@ -70,6 +70,11 @@ flowchart LR
   never locks anyone out. The dashboard is admin-only (so is anything
   new); editor and viewer accounts are API identities. New API keys
   default to builder: the schema without the rows (`internal/auth/auth.go`).
+- **Access is by role, over whole tables.** A role covers every table
+  and every row; there is no per-table, per-row or per-user access.
+  Access that depends on the data is a database's job. An app whose
+  users may see only their own rows puts a server in front of nori that
+  signs them in and applies the filter (`internal/api/api.go`).
 - **Every change is attributable.** Updates record the changed fields,
   deletes keep the full row, keys record `key:<name>`, and while
   flushes fail, events drop with a count instead of silently vanishing
