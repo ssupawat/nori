@@ -15,6 +15,12 @@ Every flag has an environment-variable twin where one makes sense; nothing else 
 | `-backup-dir` | off | - |
 | `-backup-every` | `24h` | - |
 | `-backup-keep` | `7` | - |
+| `-backup-remote` | off | `NORI_BACKUP_REMOTE` |
+| `-backup-endpoint` | AWS S3 for the region | `NORI_BACKUP_ENDPOINT` |
+| `-backup-region` | `auto` | `NORI_BACKUP_REGION` |
+| `-backup-remote-keep` | same as `-backup-keep` | - |
+| (credentials) | - | `NORI_BACKUP_ACCESS_KEY_ID`, `NORI_BACKUP_SECRET_ACCESS_KEY` |
+| (encryption) | off | `NORI_BACKUP_PASSPHRASE` |
 | `-pprof` | off | - |
 | `-trace` | off | - |
 | `-trust-proxy` | off | - |
@@ -27,7 +33,8 @@ Subcommands that operate on a data dir (the `-data` flag is inherited from the g
 
 - `nori check`: read-only integrity scan. Every document is decoded, row counts are compared against the metadata, and seq ordering, ids, types and meta/collection consistency are verified. Exit 0 = clean, 1 = problems listed.
 - `nori compact`: rebuild the data file from live content. bbolt never returns freed pages, so after heavy deletes the file keeps its high-water size; compact writes the surviving data into a fresh file and swaps, keeping the old dir as `data.bak-<timestamp>` (delete it after verifying). Runs an automatic `check` on the result.
-- `nori restore`: rebuild a data dir from a scheduled dump (see [deploy.md](deploy.md)). Dumps from older nori versions are rejected; regenerate them with the current binary.
+- `nori restore`: rebuild a data dir from a scheduled dump (see [deploy.md](deploy.md)), local or, with `-remote`, from object storage (`-dump latest` or a dump name). Dumps from older nori versions are rejected; regenerate them with the current binary.
+- `nori backups`: list the dumps in object storage, newest first (`-remote`, `-endpoint`, `-region`; inherited from the global `-backup-*` flags).
 
 The data directory holds one bbolt file (`data.db`) with everything (tables, column metadata, settings, users, sessions, audit trail) and nothing else. Copy the whole directory (while nori is stopped) to move an instance.
 

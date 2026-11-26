@@ -221,11 +221,20 @@ func openAPI() map[string]any {
 			"backup", obj("allOf", []any{sref("BackupStatus")}, "description", "absent when backups are disabled"),
 		)),
 		"BackupStatus", obj("type", "object", "properties", obj(
-			"dir", obj("type", "string"),
+			"dir", obj("type", "string", "description", "local dumps; with only -backup-remote, the staging dir"),
 			"everySeconds", obj("type", "integer"),
 			"lastAt", obj("type", "string", "description", "RFC3339 time of the last dump"),
 			"lastPath", obj("type", "string"),
 			"lastError", obj("type", "string", "description", "set when the last dump failed"),
+			"remote", obj("allOf", []any{sref("RemoteBackupStatus")}, "description", "absent when dumps are not uploaded"),
+		)),
+		"RemoteBackupStatus", obj("type", "object", "properties", obj(
+			"target", obj("type", "string", "description", "s3://bucket/prefix"),
+			"encrypted", obj("type", "boolean", "description", "dumps are age-encrypted before upload"),
+			"keep", obj("type", "integer", "description", "remote dumps kept; 0 = never pruned"),
+			"lastUploadAt", obj("type", "string", "description", "RFC3339 time of the last verified upload"),
+			"lastKey", obj("type", "string"),
+			"lastError", obj("type", "string", "description", "set when the last upload or prune failed"),
 		)),
 		"TableColumns", obj("type", "object", "properties", obj(
 			"name", obj("type", "string"),
@@ -588,10 +597,14 @@ func openAPI() map[string]any {
 		"/api/backup", obj("post", merge(
 			op("createBackup", "Admin", "Write a backup dump now (admin)"),
 			obj(
-				"description", "Disabled unless the server was started with -backup-dir.",
+				"description", "Disabled unless the server was started with -backup-dir or -backup-remote. With -backup-remote the call returns after the dump is uploaded and checked; a failed upload is a 500 with the reason.",
 				"responses", merge(
-					response("200", "Dump written", obj("type", "object", "properties", obj("path", obj("type", "string")))),
+					response("200", "Dump written", obj("type", "object", "properties", obj(
+						"path", obj("type", "string"),
+						"remoteKey", obj("type", "string", "description", "object key of the uploaded dump; absent without -backup-remote"),
+					))),
 					refs("400", "BadRequest", "401", "Unauthorized", "403", "Forbidden"),
+					errResponse("500", "The dump or its upload failed"),
 				),
 			),
 		)),

@@ -1014,12 +1014,14 @@ func TestBackupNow(t *testing.T) {
 	}
 
 	// Arrange: install a dump action.
-	e.srv.WithBackupNow(func() (string, error) { return "/tmp/nori-dump-test.json.gz", nil })
+	e.srv.WithBackupNow(func() (BackupResult, error) {
+		return BackupResult{Path: "/tmp/nori-dump-test.json.gz", RemoteKey: "prod/nori-dump-test.json.gz"}, nil
+	})
 
 	// Act + Assert: admin triggers it and gets the path...
 	_, body := e.doJSON("POST", "/api/backup", admin, nil)
-	if body["path"] != "/tmp/nori-dump-test.json.gz" {
-		t.Fatalf("backup path = %v", body["path"])
+	if body["path"] != "/tmp/nori-dump-test.json.gz" || body["remoteKey"] != "prod/nori-dump-test.json.gz" {
+		t.Fatalf("backup result = %v", body)
 	}
 
 	// ...a viewer cannot.

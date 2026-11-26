@@ -3,6 +3,7 @@ module nori
 go 1.27.1
 
 require (
+	filippo.io/age v1.3.2
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/httprate v0.16.0
 	github.com/ostafen/clover/v2 v2.0.0-alpha.3
@@ -11,6 +12,7 @@ require (
 )
 
 require (
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.2 // indirect

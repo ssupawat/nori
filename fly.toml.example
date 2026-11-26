@@ -2,6 +2,9 @@
 # never scale past one machine, since two machines cannot share a volume.
 app = "nori-change-me"
 primary_region = "sin"
+# Stop window: the shutdown dump is written, and with -backup-remote
+# uploaded, before the machine goes away. Fly's default is 5s.
+kill_timeout = 60
 
 [build]
 
@@ -9,6 +12,11 @@ primary_region = "sin"
   # Go heap ceiling: the GC fights here before the kernel OOM-kills.
   # Must match the machine's RAM minus OS/Fly overhead (~100MB).
   GOMEMLIMIT = "900MiB"
+  # Offsite copies of the dumps (docs/deploy.md, Offsite copies). Set the
+  # credentials and passphrase with: fly secrets set
+  # NORI_BACKUP_ACCESS_KEY_ID=... NORI_BACKUP_SECRET_ACCESS_KEY=... NORI_BACKUP_PASSPHRASE=...
+  # NORI_BACKUP_REMOTE = "s3://nori-backups/prod"
+  # NORI_BACKUP_ENDPOINT = "https://<account>.r2.cloudflarestorage.com"
 
 [mounts]
   source = "nori_data"

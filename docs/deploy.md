@@ -16,11 +16,11 @@ Fly's builder needs no Go or Node toolchain: a new version is a new
 `NORI_VERSION`. arm64 machines add `--build-arg NORI_ARCH=arm64`. Plain
 `Dockerfile` builds from source for hosts without releases.
 
-The volume mounts at `/data`; the data file and the dumps share it (`-data /data/nori -backup-dir /data/backups`). Three things to know:
+The volume mounts at `/data`; the data file and the dumps share it (`-data /data/nori -backup-dir /data/backups`), so losing the volume loses both. Add [offsite copies](#offsite-copies) to keep dumps somewhere else. Three things to know:
 
 - **One machine, always.** Two machines cannot share a volume; nori is single-node by design, and needing a cluster is the migration signal.
 - **Size the volume, not the schedule.** Dumps are full copies and `-backup-keep` (default 7) trims the oldest, so backup space stays at 7 dumps no matter how often they run. Verified at the ceiling (200k rows × 256 columns, 2026-10): the table itself is ~1.8 GB on disk, so disk was never the constraint. Memory is. Reads and `nori check` of a max-width table decode the whole table in RAM (~8-10 GB), which exceeds the 1 GB tier; keep max-width tables to a few thousand rows on small instances, or run wide workloads on a machine with 16 GB. Dumps stream row by row and don't hold the table in memory. For realistic widths the numbers from [configuration.md](configuration.md) apply.
-- **Every deploy backs up too.** Stopping the server (deploy included) writes a shutdown dump to the volume before the old machine goes away.
+- **Every deploy backs up too.** Stopping the server (deploy included) writes a shutdown dump to the volume before the old machine goes away. With offsite copies it is uploaded too, within the stop window: `kill_timeout = 60` in `fly.toml.example` gives it a minute (Fly's default is 5s).
 
 Scale memory to your data: the row cache holds about 0.9 KB per row, so large tables want RAM (`fly scale memory 1024`). To try the image locally, podman builds and runs it the same way: `podman build -f Dockerfile.flyio --build-arg NORI_VERSION=v0.1.0-rc.1 -t nori . && podman run --rm -v ./data:/data -p 8080:8080 nori`.
 
@@ -86,3 +86,31 @@ Two mechanisms, both safe to use while the server runs:
 - **Restore**: stop the server, move the old data dir away, then `nori restore -data ./data -dump ./backups/nori-dump-....json.gz`. Restore refuses a data dir that already holds documents, so it can never mix with live data. Last dump time and any failure show in `GET /api/status` (the status line at the top of the Dashboard).
 
 A raw copy of `data.db` is only safe while the server is stopped; use dumps for running servers.
+
+### Offsite copies
+
+`-backup-remote s3://bucket/prefix` uploads every dump (scheduled, Back up now, shutdown) to S3-compatible storage: Cloudflare R2, Backblaze B2, AWS S3, Tigris, MinIO. After each upload nori checks the stored size, then deletes the oldest remote dumps beyond `-backup-remote-keep` (default: same as `-backup-keep`; `0` leaves pruning to the bucket's lifecycle rules). A failed upload is retried with the next dump and never prunes.
+
+```sh
+export NORI_BACKUP_ACCESS_KEY_ID=...        # credentials: environment only
+export NORI_BACKUP_SECRET_ACCESS_KEY=...
+export NORI_BACKUP_PASSPHRASE=...           # optional: encrypt dumps before upload
+nori -data ./data -backup-remote s3://nori-backups/prod \
+  -backup-endpoint https://<account>.r2.cloudflarestorage.com
+```
+
+- **Endpoint and region.** R2: `https://<account>.r2.cloudflarestorage.com`, region `auto` (the default). B2: `https://s3.<region>.backblazeb2.com` with `-backup-region <region>`. AWS S3: leave the endpoint empty and set `-backup-region`. Requests use path-style URLs.
+- **Key permissions.** Read, write, list and delete objects in the bucket; nothing on the account. On R2 that is an API token with Object Read & Write, scoped to the bucket.
+- **Local copies are optional.** With `-backup-dir`, dumps stay there as before and are also uploaded. Without it, dumps are staged in `<data>.backup-staging` and removed once uploaded.
+- **Encryption.** With `NORI_BACKUP_PASSPHRASE` set, dumps are encrypted with [age](https://age-encryption.org) (passphrase) and stored as `.json.gz.age`. They decrypt with nori or the standard `age -d`. Losing the passphrase loses the backups.
+- **Status.** `GET /api/status` (and the Dashboard's "offsite" item) shows the target, the last verified upload and the last upload error. With `-backup-remote`, Back up now returns once the dump is uploaded.
+- **Fly.io.** Set the flags as environment variables in `fly.toml` (`NORI_BACKUP_REMOTE`, `NORI_BACKUP_ENDPOINT`, `NORI_BACKUP_REGION` under `[env]`) and the credentials and passphrase with `fly secrets set`.
+
+List and restore remote dumps (same flags and environment):
+
+```sh
+nori backups -remote s3://nori-backups/prod -endpoint https://<account>.r2.cloudflarestorage.com
+nori restore -data ./data -remote s3://nori-backups/prod -endpoint https://<account>.r2.cloudflarestorage.com -dump latest
+```
+
+`-dump` takes `latest` or a name from `nori backups`. A local `.age` file restores with `nori restore -dump ./nori-dump-....json.gz.age` and the passphrase in `NORI_BACKUP_PASSPHRASE`.

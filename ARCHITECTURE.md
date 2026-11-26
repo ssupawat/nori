@@ -82,12 +82,17 @@ flowchart LR
 - **The dump keeps the engine replaceable.** Scheduled and once on
   shutdown, the dump is engine-independent JSON; restore refuses
   non-fresh data dirs and dumps of another format version
-  (`internal/backup/backup.go`).
+  (`internal/backup/backup.go`). With `-backup-remote` each dump is also
+  uploaded to S3-compatible storage, age-encrypted when a passphrase is
+  set, and restore reads it back from there (`internal/backup/remote.go`,
+  `internal/s3`).
 
   ```mermaid
   flowchart LR
       n["nori"] -- "every backup-every + shutdown" --> g[("nori-dump-*.json.gz")]
+      g -- "-backup-remote" --> b[("bucket")]
       g -- "nori restore, fresh dir only" --> f[("new data dir")]
+      b -- "nori restore -remote" --> f
   ```
 
 - **Search is a linear contains-scan.** Substring search has no index
