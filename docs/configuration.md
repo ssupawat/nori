@@ -30,8 +30,8 @@ Subcommands that operate on a data dir (the `-data` flag is inherited from the g
 
 - `nori check`: read-only integrity scan. Every document is decoded, row counts are compared against the metadata, and seq ordering, ids, types and meta/collection consistency are verified. Exit 0 = clean, 1 = problems listed.
 - `nori compact`: rebuild the data file from live content. bbolt never returns freed pages, so after heavy deletes the file keeps its high-water size; compact writes the surviving data into a fresh file and swaps, keeping the old dir as `data.bak-<timestamp>` (delete it after verifying). Runs an automatic `check` on the result.
-- `nori restore`: rebuild a data dir from a scheduled dump (see [deploy.md](deploy.md)), local or, with `-remote`, from object storage (`-dump latest` or a dump name). Dumps from older nori versions are rejected; regenerate them with the current binary.
-- `nori backups`: list the dumps in object storage, newest first (`-remote`, inherited from `-backup-remote`).
+- `nori restore`: rebuild a data dir from a dump (see [deploy.md](deploy.md)): a local file, or `-dump latest` or a name from the bucket. Dumps from older nori versions are rejected; regenerate them with the current binary.
+- `nori backups`: list the bucket's dumps, newest first.
 
 The data directory holds one bbolt file (`data.db`) with everything (tables, column metadata, settings, users, sessions, audit trail) and nothing else. Copy the whole directory (while nori is stopped) to move an instance.
 

@@ -83,9 +83,8 @@ flowchart LR
   shutdown, the dump is engine-independent JSON; restore refuses
   non-fresh data dirs and dumps of another format version
   (`internal/backup/backup.go`). With `-backup-remote` each dump is also
-  uploaded to a bucket (gocloud.dev/blob: S3-compatible or a directory),
-  age-encrypted when a passphrase is set, and restore reads it back from
-  there (`internal/backup/remote.go`).
+  uploaded to a bucket, age-encrypted when a passphrase is set
+  (`internal/backup/remote.go`).
 
   ```mermaid
   flowchart LR
