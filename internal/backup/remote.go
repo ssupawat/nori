@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"filippo.io/age"
 	"gocloud.dev/blob"
@@ -27,13 +26,6 @@ type Remote struct {
 	Target     string // the bucket URL as configured
 	Passphrase string // non-empty: dumps are age-encrypted before upload
 	bucket     *blob.Bucket
-}
-
-// Dump is one dump in the bucket.
-type Dump struct {
-	Name    string
-	Size    int64
-	ModTime time.Time
 }
 
 // OpenRemote opens the bucket at target, e.g.
@@ -132,8 +124,8 @@ func (r *Remote) encryptTo(dst io.Writer, src io.Reader) error {
 }
 
 // List returns the dumps in the bucket, newest first.
-func (r *Remote) List(ctx context.Context) ([]Dump, error) {
-	var out []Dump
+func (r *Remote) List(ctx context.Context) ([]*blob.ListObject, error) {
+	var out []*blob.ListObject
 	it := r.bucket.List(&blob.ListOptions{Prefix: "nori-dump-"})
 	for {
 		obj, err := it.Next(ctx)
@@ -144,11 +136,11 @@ func (r *Remote) List(ctx context.Context) ([]Dump, error) {
 			return nil, err
 		}
 		if dumpName.MatchString(obj.Key) {
-			out = append(out, Dump{Name: obj.Key, Size: obj.Size, ModTime: obj.ModTime})
+			out = append(out, obj)
 		}
 	}
 	// timestamps in the names sort lexicographically
-	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Key > out[j].Key })
 	return out, nil
 }
 
@@ -164,7 +156,7 @@ func (r *Remote) Fetch(ctx context.Context, name, dir string) (string, string, e
 		if len(dumps) == 0 {
 			return "", "", fmt.Errorf("no dumps in %s", r.Target)
 		}
-		name = dumps[0].Name
+		name = dumps[0].Key
 	}
 	if !dumpName.MatchString(name) {
 		return "", "", fmt.Errorf("%q is not a dump name (nori-dump-*.json.gz[.age])", name)

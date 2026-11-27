@@ -50,7 +50,7 @@ func TestRemoteShipListFetch(t *testing.T) {
 	dumps, err := r.List(ctx)
 
 	// Assert: newest first, the other file left out.
-	if err != nil || len(dumps) != 2 || dumps[0].Name != "nori-dump-20261102-010000.000000001.json.gz" || dumps[0].Size != 30 {
+	if err != nil || len(dumps) != 2 || dumps[0].Key != "nori-dump-20261102-010000.000000001.json.gz" || dumps[0].Size != 30 {
 		t.Fatalf("list = %+v, %v", dumps, err)
 	}
 

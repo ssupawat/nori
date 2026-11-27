@@ -124,35 +124,34 @@ func main() {
 	// dumpMu serializes whole backups (dump and upload) across the
 	// schedule, Back up now and shutdown
 	var dumpMu sync.Mutex
+	errText := func(err error) string {
+		if err == nil {
+			return ""
+		}
+		return err.Error()
+	}
 	runBackup := func(ctx context.Context) (string, string, error) {
 		dumpMu.Lock()
 		defer dumpMu.Unlock()
 		path, err := dumpJSON(s, localDir, *backupKeep)
 		backupMu.Lock()
-		lastBackupAt, lastBackupPath, lastBackupErr = time.Now(), path, ""
-		if err != nil {
-			lastBackupErr = err.Error()
-		}
+		lastBackupAt, lastBackupPath, lastBackupErr = time.Now(), path, errText(err)
 		backupMu.Unlock()
 		if err != nil || remote == nil {
 			return path, "", err
 		}
 		key, err := remote.Ship(ctx, path)
 		backupMu.Lock()
-		if key != "" {
+		lastUploadErr = errText(err)
+		if err == nil {
 			lastUploadAt, lastUploadKey = time.Now(), key
 		}
-		lastUploadErr = ""
-		if err != nil {
-			lastUploadErr = err.Error()
-		}
 		backupMu.Unlock()
-		if key != "" && staging {
+		if err == nil && staging {
 			// remove staged dumps, including ones left by failed uploads
-			if staged, gerr := filepath.Glob(filepath.Join(localDir, "nori-dump-*.json.gz")); gerr == nil {
-				for _, f := range staged {
-					os.Remove(f)
-				}
+			staged, _ := filepath.Glob(filepath.Join(localDir, "nori-dump-*.json.gz"))
+			for _, f := range staged {
+				os.Remove(f)
 			}
 		}
 		return path, key, err
@@ -163,7 +162,7 @@ func main() {
 			log.Printf("backup failed (%s): %v", when, err)
 		case err != nil:
 			log.Printf("backup written (%s): %s; upload to %s failed: %v", when, path, remote.Target, err)
-		case key != "":
+		case remote != nil:
 			log.Printf("backup written (%s) and uploaded: %s in %s", when, key, remote.Target)
 		default:
 			log.Printf("backup written (%s): %s", when, path)
@@ -203,7 +202,7 @@ func main() {
 					return
 				}
 				if len(dumps) > 0 {
-					lastUploadAt, lastUploadKey = dumps[0].ModTime, dumps[0].Name
+					lastUploadAt, lastUploadKey = dumps[0].ModTime, dumps[0].Key
 				}
 			}()
 		}
@@ -389,7 +388,7 @@ func runBackupsCmd(args []string, inheritRemote string) int {
 		fmt.Printf("no dumps in %s\n", *target)
 	}
 	for _, d := range dumps {
-		fmt.Printf("%s  %10d  %s\n", d.ModTime.UTC().Format(time.RFC3339), d.Size, d.Name)
+		fmt.Printf("%s  %10d  %s\n", d.ModTime.UTC().Format(time.RFC3339), d.Size, d.Key)
 	}
 	return 0
 }
