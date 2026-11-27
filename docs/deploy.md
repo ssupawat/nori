@@ -113,6 +113,15 @@ nori -data ./data -backup-remote 's3://nori-backups?prefix=prod/&endpoint=https:
 - **Status.** `GET /api/status` (and the Dashboard's "offsite" item) shows the target, the last verified upload and the last upload error. With `-backup-remote`, Back up now returns once the dump is uploaded.
 - **Fly.io.** Set `NORI_BACKUP_REMOTE` under `[env]` in `fly.toml`, and the keys and passphrase with `fly secrets set`.
 
+#### Creating the passphrase
+
+1. Generate one: `openssl rand -base64 32` prints 44 random characters.
+2. Save it in your password manager before using it. nori keeps no copy, and without it the encrypted dumps cannot be read.
+3. Give it to nori as a secret, never in `fly.toml` or the repo: `fly secrets set NORI_BACKUP_PASSPHRASE='<passphrase>'`, or `export NORI_BACKUP_PASSPHRASE=...` elsewhere.
+4. Check it: Back up now, then, on any machine with `NORI_BACKUP_REMOTE`, the keys and the saved passphrase set, restore the latest dump into an empty dir (`nori restore -data /tmp/check -dump latest`). A downloaded dump also decrypts with `age -d -o dump.json.gz nori-dump-....json.gz.age`, which asks for the passphrase.
+
+Changing it: dumps written after the change use the new passphrase; older dumps still need the old one, so keep it until the bucket's lifecycle rule has removed them.
+
 List and restore remote dumps (`-remote` defaults to `-backup-remote`, so with `NORI_BACKUP_REMOTE` set it can be left out):
 
 ```sh
