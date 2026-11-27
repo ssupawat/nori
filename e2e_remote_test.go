@@ -19,7 +19,7 @@ import (
 func TestRemoteBackupEndToEnd(t *testing.T) {
 	// Arrange: a fake bucket, credentials and a passphrase in the
 	// environment, and a server with only -backup-remote (dumps staged).
-	fake := s3test.New()
+	fake := s3test.New("bkt")
 	defer fake.Close()
 	t.Setenv("NORI_BACKUP_ACCESS_KEY_ID", "test-id")
 	t.Setenv("NORI_BACKUP_SECRET_ACCESS_KEY", "test-secret")

@@ -32,7 +32,7 @@ func fakeDump(t *testing.T, dir, stamp, content string) string {
 
 func TestRemoteShipPrunesOldest(t *testing.T) {
 	// Arrange: keep 2, a key that is not a dump under the same prefix.
-	srv := s3test.New()
+	srv := s3test.New("b")
 	defer srv.Close()
 	r := newRemote(t, srv, 2, "")
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestRemoteShipPrunesOldest(t *testing.T) {
 
 func TestRemoteShipFailureKeepsRemoteSet(t *testing.T) {
 	// Arrange: two dumps already uploaded with keep 1 would prune on success.
-	srv := s3test.New()
+	srv := s3test.New("b")
 	defer srv.Close()
 	r := newRemote(t, srv, 0, "")
 	ctx := context.Background()
@@ -90,7 +90,7 @@ func TestRemoteShipFailureKeepsRemoteSet(t *testing.T) {
 
 func TestRemoteEncryptedRoundTrip(t *testing.T) {
 	// Arrange
-	srv := s3test.New()
+	srv := s3test.New("b")
 	defer srv.Close()
 	r := newRemote(t, srv, 3, "correct horse")
 	ctx := context.Background()
@@ -135,7 +135,7 @@ func TestRemoteEncryptedRoundTrip(t *testing.T) {
 
 func TestRemoteFetchByName(t *testing.T) {
 	// Arrange: two plain dumps.
-	srv := s3test.New()
+	srv := s3test.New("b")
 	defer srv.Close()
 	r := newRemote(t, srv, 0, "")
 	ctx := context.Background()
