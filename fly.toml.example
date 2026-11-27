@@ -13,10 +13,9 @@ kill_timeout = 60
   # Must match the machine's RAM minus OS/Fly overhead (~100MB).
   GOMEMLIMIT = "900MiB"
   # Offsite copies of the dumps (docs/deploy.md, Offsite copies). Set the
-  # credentials and passphrase with: fly secrets set
-  # NORI_BACKUP_ACCESS_KEY_ID=... NORI_BACKUP_SECRET_ACCESS_KEY=... NORI_BACKUP_PASSPHRASE=...
-  # NORI_BACKUP_REMOTE = "s3://nori-backups/prod"
-  # NORI_BACKUP_ENDPOINT = "https://<account>.r2.cloudflarestorage.com"
+  # keys and passphrase with: fly secrets set
+  # AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... NORI_BACKUP_PASSPHRASE=...
+  # NORI_BACKUP_REMOTE = "s3://nori-backups?prefix=prod/&endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true"
 
 [mounts]
   source = "nori_data"

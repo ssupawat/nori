@@ -32,9 +32,8 @@ type BackupStatus struct {
 // RemoteBackupStatus is the upload side of backups, present when dumps
 // are shipped to object storage.
 type RemoteBackupStatus struct {
-	Target       string `json:"target"` // s3://bucket/prefix
+	Target       string `json:"target"` // bucket URL
 	Encrypted    bool   `json:"encrypted"`
-	Keep         int    `json:"keep"`                   // 0 = never pruned
 	LastUploadAt string `json:"lastUploadAt,omitempty"` // RFC3339
 	LastKey      string `json:"lastKey,omitempty"`
 	LastError    string `json:"lastError,omitempty"`

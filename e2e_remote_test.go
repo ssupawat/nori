@@ -12,22 +12,18 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-
-	"nori/internal/s3/s3test"
 )
 
 func TestRemoteBackupEndToEnd(t *testing.T) {
-	// Arrange: a fake bucket, credentials and a passphrase in the
-	// environment, and a server with only -backup-remote (dumps staged).
-	fake := s3test.New("bkt")
-	defer fake.Close()
-	t.Setenv("NORI_BACKUP_ACCESS_KEY_ID", "test-id")
-	t.Setenv("NORI_BACKUP_SECRET_ACCESS_KEY", "test-secret")
+	// Arrange: a file:// bucket, a passphrase, and a server with only
+	// -backup-remote (dumps staged).
+	bucketDir := t.TempDir()
+	target := "file://" + bucketDir + "?prefix=prod/"
+	stored := filepath.Join(bucketDir, "prod")
 	t.Setenv("NORI_BACKUP_PASSPHRASE", "correct horse")
-	remoteArgs := []string{"-backup-remote", "s3://bkt/prod", "-backup-endpoint", fake.URL}
 	dataDir := filepath.Join(t.TempDir(), "nori")
 	staging := dataDir + ".backup-staging"
-	s := startE2E(t, dataDir, remoteArgs...)
+	s := startE2E(t, dataDir, "-backup-remote", target)
 
 	if resp, raw := s.post(t, "/api/tables", `{"name":"People","columns":[{"name":"name","type":"text"},{"name":"age","type":"number"}]}`); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create table: %d %s", resp.StatusCode, raw)
@@ -38,8 +34,8 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 			t.Fatalf("insert %s: %d %s", name, resp.StatusCode, raw)
 		}
 	}
-	staged := func() []string {
-		files, _ := filepath.Glob(filepath.Join(staging, "nori-dump-*"))
+	glob := func(pattern string) []string {
+		files, _ := filepath.Glob(pattern)
 		return files
 	}
 	type remoteStatus struct {
@@ -59,19 +55,32 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 		return st.Backup.Remote
 	}
 
-	// Act + Assert: a failed upload is a 500, keeps the staged dump, shows in status.
-	fake.FailNextPuts(3)
+	// Act + Assert: with the bucket dir replaced by a file, the upload fails
+	// with a 500, keeps the staged dump and shows in status.
+	if err := os.RemoveAll(bucketDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bucketDir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if resp, raw := s.post(t, "/api/backup", ``); resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("backup with a failing bucket: %d %s", resp.StatusCode, raw)
+		t.Fatalf("backup into a broken bucket: %d %s", resp.StatusCode, raw)
 	}
-	if len(staged()) != 1 || len(fake.Keys("bkt")) != 0 {
-		t.Fatalf("after a failed upload: staged %v, remote %v", staged(), fake.Keys("bkt"))
+	if len(glob(filepath.Join(staging, "nori-dump-*"))) != 1 {
+		t.Fatalf("staged dumps after a failed upload: %v", glob(filepath.Join(staging, "*")))
 	}
-	if st := status(); st.LastError == "" || st.Target != "s3://bkt/prod" || !st.Encrypted {
+	if st := status(); st.LastError == "" || st.Target != target || !st.Encrypted {
 		t.Fatalf("status after a failed upload: %+v", st)
 	}
 
-	// Act + Assert: the next backup uploads encrypted and clears staging.
+	// Act + Assert: once the bucket is back, the next backup uploads
+	// encrypted and clears staging.
+	if err := os.Remove(bucketDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(bucketDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	resp, raw := s.post(t, "/api/backup", ``)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("backup: %d %s", resp.StatusCode, raw)
@@ -79,11 +88,14 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 	var res struct {
 		RemoteKey string `json:"remoteKey"`
 	}
-	if err := json.Unmarshal(raw, &res); err != nil || !strings.HasPrefix(res.RemoteKey, "prod/nori-dump-") || !strings.HasSuffix(res.RemoteKey, ".json.gz.age") {
+	if err := json.Unmarshal(raw, &res); err != nil || !strings.HasPrefix(res.RemoteKey, "nori-dump-") || !strings.HasSuffix(res.RemoteKey, ".json.gz.age") {
 		t.Fatalf("backup result: %s", raw)
 	}
-	if len(staged()) != 0 {
-		t.Fatalf("staging not cleared after an upload: %v", staged())
+	if b, _ := os.ReadFile(filepath.Join(stored, res.RemoteKey)); !strings.HasPrefix(string(b), "age-encryption.org/v1") {
+		t.Fatalf("stored dump is not age-encrypted")
+	}
+	if left := glob(filepath.Join(staging, "nori-dump-*")); len(left) != 0 {
+		t.Fatalf("staging not cleared after an upload: %v", left)
 	}
 	if st := status(); st.LastError != "" || st.LastKey != res.RemoteKey {
 		t.Fatalf("status after an upload: %+v", st)
@@ -97,23 +109,23 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 	if err := s.cmd.Wait(); err != nil {
 		t.Fatalf("server exit: %v", err)
 	}
-	if keys := fake.Keys("bkt"); len(keys) != 2 {
-		t.Fatalf("remote dumps after shutdown: %v", keys)
+	if dumps := glob(filepath.Join(stored, "nori-dump-*.age")); len(dumps) != 2 {
+		t.Fatalf("remote dumps after shutdown: %v", dumps)
 	}
 
 	// Act + Assert: nori backups lists both, newest first.
-	out, err := exec.Command(e2eBin, append([]string{"backups"}, "-remote", "s3://bkt/prod", "-endpoint", fake.URL)...).Output()
+	out, err := exec.Command(e2eBin, "backups", "-remote", target).Output()
 	if err != nil {
 		t.Fatalf("backups: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(lines) != 2 || !strings.HasSuffix(lines[1], strings.TrimPrefix(res.RemoteKey, "prod/")) {
+	if len(lines) != 2 || !strings.HasSuffix(lines[1], res.RemoteKey) {
 		t.Fatalf("backups output:\n%s", out)
 	}
 
 	// Act: restore the latest remote dump into a fresh dir and boot on it.
 	freshDir := t.TempDir()
-	restore := exec.Command(e2eBin, "restore", "-data", freshDir, "-remote", "s3://bkt/prod", "-endpoint", fake.URL, "-dump", "latest")
+	restore := exec.Command(e2eBin, "restore", "-data", freshDir, "-remote", target, "-dump", "latest")
 	restore.Stderr = os.Stderr
 	if out, err := restore.Output(); err != nil {
 		t.Fatalf("restore: %v (%s)", err, out)
@@ -136,16 +148,10 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 	assertRows(s2)
 	s2.kill()
 
-	// Act: a local .age file restores even with a remote configured in
-	// the environment.
-	stored, _ := fake.Object("bkt", res.RemoteKey)
-	local := filepath.Join(t.TempDir(), filepath.Base(res.RemoteKey))
-	if err := os.WriteFile(local, stored, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("NORI_BACKUP_REMOTE", "s3://bkt/prod")
-	t.Setenv("NORI_BACKUP_ENDPOINT", fake.URL)
-	gets := fake.Requests("GET")
+	// Act: a local .age file restores even with an unreachable remote in
+	// the environment, so the remote is never touched.
+	t.Setenv("NORI_BACKUP_REMOTE", "file:///no/such/bucket")
+	local := filepath.Join(stored, res.RemoteKey)
 	localDir := t.TempDir()
 	restore = exec.Command(e2eBin, "restore", "-data", localDir, "-dump", local)
 	restore.Stderr = os.Stderr
@@ -153,26 +159,22 @@ func TestRemoteBackupEndToEnd(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), "restored from "+local) {
 		t.Fatalf("local restore: %v (%s)", err, out)
 	}
-	if fake.Requests("GET") != gets {
-		t.Fatalf("a local restore fetched from the bucket")
-	}
+	t.Setenv("NORI_BACKUP_REMOTE", "")
 
 	// Assert
 	assertRows(startE2E(t, localDir))
 }
 
 func TestRemoteBackupConfigErrors(t *testing.T) {
-	// Arrange: no credentials in the environment.
-	t.Setenv("NORI_BACKUP_ACCESS_KEY_ID", "")
-	t.Setenv("NORI_BACKUP_SECRET_ACCESS_KEY", "")
-	for name, args := range map[string][]string{
-		"bad target":     {"-backup-remote", "bkt/prod", "-backup-endpoint", "https://x"},
-		"no endpoint":    {"-backup-remote", "s3://bkt/prod"},
-		"no credentials": {"-backup-remote", "s3://bkt/prod", "-backup-endpoint", "https://x"},
+	for name, target := range map[string]string{
+		"no scheme":         "bkt/prod",
+		"unsupported":       "gs://bkt",
+		"missing directory": "file:///no/such/bucket",
+		"unknown option":    "s3://bkt?nope=1",
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Act
-			cmd := exec.Command(e2eBin, append([]string{"-addr", freePort(t), "-data", t.TempDir()}, args...)...)
+			cmd := exec.Command(e2eBin, "-addr", freePort(t), "-data", t.TempDir(), "-backup-remote", target)
 			cmd.Env = append(os.Environ(), "ADMIN_PASS="+e2ePass)
 			out, err := cmd.CombinedOutput()
 

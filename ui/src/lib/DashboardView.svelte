@@ -118,14 +118,14 @@
             backups <span class="font-medium text-zinc-700">{status.backup.lastAt ? `last ${ago(status.backup.lastAt)}` : "no dump yet"}</span>{#if status.backup.lastError}<span class="text-red-600"> (failed: {status.backup.lastError})</span>{/if}
           </span>
           {#if status.backup.remote}
-            <span class="cursor-help" title="Dumps upload to {status.backup.remote.target}{status.backup.remote.encrypted ? ', encrypted' : ''}{status.backup.remote.keep > 0 ? `, last ${status.backup.remote.keep} kept` : ''}">
+            <span class="cursor-help" title="Dumps upload to {status.backup.remote.target}{status.backup.remote.encrypted ? ', encrypted' : ''}">
               offsite <span class="font-medium text-zinc-700">{status.backup.remote.lastUploadAt ? `last ${ago(status.backup.remote.lastUploadAt)}` : "no upload yet"}</span>{#if status.backup.remote.lastError}<span class="text-red-600"> (failed: {status.backup.remote.lastError})</span>{/if}
             </span>
           {:else}
-            <span class="cursor-help text-amber-600" title="Dumps stay on this machine. Start nori with -backup-remote s3://bucket/prefix to upload them to object storage">no offsite copy</span>
+            <span class="cursor-help text-amber-600" title="Dumps stay on this machine. Start nori with -backup-remote <bucket URL> to upload them to object storage">no offsite copy</span>
           {/if}
         {:else}
-          <span class="cursor-help text-amber-600" title="Scheduled backups are off. Start nori with -backup-dir <dir> or -backup-remote s3://bucket/prefix to turn them on">backups off</span>
+          <span class="cursor-help text-amber-600" title="Scheduled backups are off. Start nori with -backup-dir <dir> or -backup-remote <bucket URL> to turn them on">backups off</span>
         {/if}
         <button
           class="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 hover:bg-zinc-50 disabled:opacity-50"

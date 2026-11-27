@@ -52,10 +52,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "directory for scheduled JSON dumps (empty = disabled)")
 	backupEvery := flag.Duration("backup-every", 24*time.Hour, "time between scheduled dumps")
 	backupKeep := flag.Int("backup-keep", 7, "number of scheduled dumps to keep")
-	backupRemote := flag.String("backup-remote", envOr("NORI_BACKUP_REMOTE", ""), "upload dumps to S3-compatible storage: s3://bucket/prefix (empty = off)")
-	backupEndpoint := flag.String("backup-endpoint", envOr("NORI_BACKUP_ENDPOINT", ""), "S3 endpoint URL, e.g. https://<account>.r2.cloudflarestorage.com (empty = AWS S3 for -backup-region)")
-	backupRegion := flag.String("backup-region", envOr("NORI_BACKUP_REGION", "auto"), "S3 signing region")
-	backupRemoteKeep := flag.Int("backup-remote-keep", -1, "remote dumps to keep (-1 = same as -backup-keep, 0 = never prune)")
+	backupRemote := flag.String("backup-remote", envOr("NORI_BACKUP_REMOTE", ""), "upload dumps to this bucket URL, e.g. s3://bucket?prefix=prod/&endpoint=...&region=auto&use_path_style=true (empty = off)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -71,9 +68,9 @@ func main() {
 		rest := flag.Args()[1:]
 		switch sub {
 		case "restore":
-			os.Exit(runRestoreCmd(rest, *dataDir, *backupRemote, *backupEndpoint, *backupRegion))
+			os.Exit(runRestoreCmd(rest, *dataDir, *backupRemote))
 		case "backups":
-			os.Exit(runBackupsCmd(rest, *backupRemote, *backupEndpoint, *backupRegion))
+			os.Exit(runBackupsCmd(rest, *backupRemote))
 		case "check":
 			os.Exit(runCheckCmd(rest, *dataDir))
 		case "compact":
@@ -107,14 +104,11 @@ func main() {
 
 	var remote *backup.Remote
 	if *backupRemote != "" {
-		keep := *backupRemoteKeep
-		if keep < 0 {
-			keep = *backupKeep
-		}
-		remote, err = newRemote(*backupRemote, *backupEndpoint, *backupRegion, keep)
+		remote, err = openRemote(context.Background(), *backupRemote)
 		if err != nil {
 			log.Fatalf("remote backups: %v", err)
 		}
+		defer remote.Close()
 	}
 	// dumps go to -backup-dir; with only a remote, they are staged next to
 	// the data dir and removed once uploaded
@@ -127,7 +121,7 @@ func main() {
 	var backupMu sync.Mutex
 	var lastBackupAt, lastUploadAt time.Time
 	var lastBackupPath, lastBackupErr, lastUploadKey, lastUploadErr string
-	// dumpMu serializes whole backups (dump, upload, prune) across the
+	// dumpMu serializes whole backups (dump and upload) across the
 	// schedule, Back up now and shutdown
 	var dumpMu sync.Mutex
 	runBackup := func(ctx context.Context) (string, string, error) {
@@ -167,12 +161,10 @@ func main() {
 		switch {
 		case path == "":
 			log.Printf("backup failed (%s): %v", when, err)
-		case err != nil && key == "":
-			log.Printf("backup written (%s): %s; upload to %s failed: %v", when, path, remote.Target(), err)
 		case err != nil:
-			log.Printf("backup written (%s) and uploaded to %s/%s; %v", when, "s3://"+remote.Bucket, key, err)
+			log.Printf("backup written (%s): %s; upload to %s failed: %v", when, path, remote.Target, err)
 		case key != "":
-			log.Printf("backup written (%s) and uploaded: s3://%s/%s", when, remote.Bucket, key)
+			log.Printf("backup written (%s) and uploaded: %s in %s", when, key, remote.Target)
 		default:
 			log.Printf("backup written (%s): %s", when, path)
 		}
@@ -199,19 +191,19 @@ func main() {
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				objs, err := remote.List(ctx)
+				dumps, err := remote.List(ctx)
 				backupMu.Lock()
 				defer backupMu.Unlock()
 				if !lastUploadAt.IsZero() {
 					return
 				}
 				if err != nil {
-					lastUploadErr = "list " + remote.Target() + ": " + err.Error()
+					lastUploadErr = "list " + remote.Target + ": " + err.Error()
 					log.Printf("remote backups: %s", lastUploadErr)
 					return
 				}
-				if len(objs) > 0 {
-					lastUploadAt, lastUploadKey = objs[0].LastModified, objs[0].Key
+				if len(dumps) > 0 {
+					lastUploadAt, lastUploadKey = dumps[0].ModTime, dumps[0].Name
 				}
 			}()
 		}
@@ -285,9 +277,8 @@ func main() {
 			}
 			if remote != nil {
 				st.Backup.Remote = &api.RemoteBackupStatus{
-					Target:       remote.Target(),
+					Target:       remote.Target,
 					Encrypted:    remote.Passphrase != "",
-					Keep:         remote.Keep,
 					LastUploadAt: api.SinceRFC3339(lastUploadAt),
 					LastKey:      lastUploadKey,
 					LastError:    lastUploadErr,
@@ -368,20 +359,20 @@ func envOr(key, fallback string) string {
 // runRestoreCmd implements `nori restore`: rebuild a data dir from a
 // scheduled dump. It only writes into an empty data dir, so the intended
 // flow is: stop the server, move the old data dir away, restore, start.
-func runRestoreCmd(args []string, inheritData, inheritRemote, inheritEndpoint, inheritRegion string) int {
+func runRestoreCmd(args []string, inheritData, inheritRemote string) int {
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
 	dataDir := fs.String("data", inheritData, "data directory to build")
 	dumpArg := fs.String("dump", "", "dump file to restore from (nori-dump-*.json.gz[.age]); with -remote, a dump name or latest")
-	remoteTarget, remoteEndpoint, remoteRegion := remoteFlags(fs, inheritRemote, inheritEndpoint, inheritRegion)
+	remoteTarget := fs.String("remote", inheritRemote, "bucket URL, as for -backup-remote")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *dumpArg == "" {
 		fmt.Fprintln(os.Stderr, "usage: nori restore -data ./data -dump ./backups/nori-dump-....json.gz")
-		fmt.Fprintln(os.Stderr, "       nori restore -data ./data -remote s3://bucket/prefix -dump latest")
+		fmt.Fprintln(os.Stderr, "       nori restore -data ./data -remote <bucket URL> -dump latest")
 		return 2
 	}
-	dumpPath, source, cleanup, err := restoreSource(*dumpArg, *remoteTarget, *remoteEndpoint, *remoteRegion)
+	dumpPath, source, cleanup, err := restoreSource(*dumpArg, *remoteTarget)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

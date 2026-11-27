@@ -229,12 +229,11 @@ func openAPI() map[string]any {
 			"remote", obj("allOf", []any{sref("RemoteBackupStatus")}, "description", "absent when dumps are not uploaded"),
 		)),
 		"RemoteBackupStatus", obj("type", "object", "properties", obj(
-			"target", obj("type", "string", "description", "s3://bucket/prefix"),
+			"target", obj("type", "string", "description", "bucket URL"),
 			"encrypted", obj("type", "boolean", "description", "dumps are age-encrypted before upload"),
-			"keep", obj("type", "integer", "description", "remote dumps kept; 0 = never pruned"),
 			"lastUploadAt", obj("type", "string", "description", "RFC3339 time of the last verified upload"),
 			"lastKey", obj("type", "string"),
-			"lastError", obj("type", "string", "description", "set when the last upload or prune failed"),
+			"lastError", obj("type", "string", "description", "set when the last upload failed"),
 		)),
 		"TableColumns", obj("type", "object", "properties", obj(
 			"name", obj("type", "string"),

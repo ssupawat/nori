@@ -5,232 +5,216 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"filippo.io/age"
-
-	"nori/internal/s3"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/fileblob" // file:// buckets
+	_ "gocloud.dev/blob/s3blob"   // s3:// buckets
 )
 
 // dumpName matches dump file names, plain or age-encrypted.
 var dumpName = regexp.MustCompile(`^nori-dump-[0-9]{8}-[0-9.]+\.json\.gz(\.age)?$`)
 
-// Remote ships dumps to a bucket on S3-compatible storage.
+// Remote ships dumps to a bucket (s3:// or file://, see gocloud.dev/blob).
 type Remote struct {
-	Client     *s3.Client
-	Bucket     string
-	Prefix     string // no leading or trailing slash; "" = bucket root
-	Keep       int    // remote dumps kept after an upload; 0 = never prune
+	Target     string // the bucket URL as configured
 	Passphrase string // non-empty: dumps are age-encrypted before upload
+	bucket     *blob.Bucket
 }
 
-// ParseTarget splits "s3://bucket/prefix" into bucket and prefix.
-func ParseTarget(target string) (bucket, prefix string, err error) {
-	rest, ok := strings.CutPrefix(target, "s3://")
-	if !ok {
-		return "", "", fmt.Errorf("backup target %q: want s3://bucket/prefix", target)
-	}
-	bucket, prefix, _ = strings.Cut(rest, "/")
-	if bucket == "" {
-		return "", "", fmt.Errorf("backup target %q: no bucket", target)
-	}
-	return bucket, strings.Trim(prefix, "/"), nil
+// Dump is one dump in the bucket.
+type Dump struct {
+	Name    string
+	Size    int64
+	ModTime time.Time
 }
 
-// Target is the s3:// form of the destination.
-func (r *Remote) Target() string {
-	if r.Prefix == "" {
-		return "s3://" + r.Bucket
+// OpenRemote opens the bucket at target, e.g.
+// s3://bucket?prefix=prod/&endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true.
+// s3:// URLs send request checksums only where S3 requires them unless
+// the URL says otherwise.
+func OpenRemote(ctx context.Context, target, passphrase string) (*Remote, error) {
+	u, err := url.Parse(target)
+	if err != nil || (u.Scheme != "s3" && u.Scheme != "file") {
+		return nil, fmt.Errorf("backup target %q: want an s3:// or file:// bucket URL", target)
 	}
-	return "s3://" + r.Bucket + "/" + r.Prefix
-}
-
-func (r *Remote) key(name string) string {
-	if r.Prefix == "" {
-		return name
-	}
-	return r.Prefix + "/" + name
-}
-
-// Ship uploads the dump at path (encrypted first when a passphrase is
-// set), checks the stored size, then prunes old remote dumps. Pruning
-// happens only after a verified upload. It returns the object key.
-func (r *Remote) Ship(ctx context.Context, path string) (string, error) {
-	src, name := path, filepath.Base(path)
-	if r.Passphrase != "" {
-		src = path + ".age"
-		name += ".age"
-		if err := EncryptFile(path, src, r.Passphrase); err != nil {
-			os.Remove(src)
-			return "", err
+	if u.Scheme == "s3" {
+		q := u.Query()
+		for _, k := range []string{"request_checksum_calculation", "response_checksum_validation"} {
+			if !q.Has(k) {
+				q.Set(k, "when_required")
+			}
 		}
-		defer os.Remove(src)
+		u.RawQuery = q.Encode()
 	}
-	info, err := os.Stat(src)
+	b, err := blob.OpenBucket(ctx, u.String())
+	if err != nil {
+		return nil, fmt.Errorf("backup target %q: %w", target, err)
+	}
+	return &Remote{Target: target, Passphrase: passphrase, bucket: b}, nil
+}
+
+// Close releases the bucket.
+func (r *Remote) Close() error { return r.bucket.Close() }
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// Ship uploads the dump at path, age-encrypted when a passphrase is set,
+// and checks the stored size. It returns the object name.
+func (r *Remote) Ship(ctx context.Context, path string) (string, error) {
+	name := filepath.Base(path)
+	if r.Passphrase != "" {
+		name += ".age"
+	}
+	in, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	key := r.key(name)
-	if err := r.Client.PutFile(ctx, r.Bucket, key, src); err != nil {
-		return "", fmt.Errorf("upload %s: %w", key, err)
-	}
-	size, err := r.Client.Head(ctx, r.Bucket, key)
+	defer in.Close()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	w, err := r.bucket.NewWriter(ctx, name, nil)
 	if err != nil {
-		return "", fmt.Errorf("check %s: %w", key, err)
+		return "", fmt.Errorf("upload %s: %w", name, err)
 	}
-	if size != info.Size() {
-		return "", fmt.Errorf("check %s: stored %d bytes, uploaded %d", key, size, info.Size())
+	counted := &countingWriter{w: w}
+	if err := r.encryptTo(counted, in); err != nil {
+		cancel() // abandons the upload
+		w.Close()
+		return "", fmt.Errorf("upload %s: %w", name, err)
 	}
-	if err := r.prune(ctx); err != nil {
-		return key, fmt.Errorf("uploaded %s, but pruning old dumps failed: %w", key, err)
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("upload %s: %w", name, err)
 	}
-	return key, nil
+	attrs, err := r.bucket.Attributes(ctx, name)
+	if err != nil {
+		return "", fmt.Errorf("check %s: %w", name, err)
+	}
+	if attrs.Size != counted.n {
+		return "", fmt.Errorf("check %s: stored %d bytes, uploaded %d", name, attrs.Size, counted.n)
+	}
+	return name, nil
 }
 
-// List returns the remote dumps, newest first.
-func (r *Remote) List(ctx context.Context) ([]s3.Object, error) {
-	prefix := r.key("nori-dump-")
-	objs, err := r.Client.List(ctx, r.Bucket, prefix)
-	if err != nil {
-		return nil, err
+func (r *Remote) encryptTo(dst io.Writer, src io.Reader) error {
+	if r.Passphrase == "" {
+		_, err := io.Copy(dst, src)
+		return err
 	}
-	var out []s3.Object
-	for _, o := range objs {
-		if dumpName.MatchString(strings.TrimPrefix(o.Key, r.key(""))) {
-			out = append(out, o)
-		}
-	}
-	// timestamps in the names sort lexicographically
-	sort.Slice(out, func(i, j int) bool { return out[i].Key > out[j].Key })
-	return out, nil
-}
-
-func (r *Remote) prune(ctx context.Context) error {
-	if r.Keep <= 0 {
-		return nil
-	}
-	objs, err := r.List(ctx)
+	rec, err := age.NewScryptRecipient(r.Passphrase)
 	if err != nil {
 		return err
 	}
-	if len(objs) <= r.Keep {
-		return nil
+	w, err := age.Encrypt(dst, rec)
+	if err != nil {
+		return err
 	}
-	for _, o := range objs[r.Keep:] {
-		if err := r.Client.Delete(ctx, r.Bucket, o.Key); err != nil {
-			return err
-		}
+	if _, err := io.Copy(w, src); err != nil {
+		return err
 	}
-	return nil
+	return w.Close()
 }
 
-// Fetch downloads a remote dump into dir and returns its object key and
-// the path of a plain .json.gz, decrypting an .age dump with the
-// passphrase. name is a dump file name or "latest".
-func (r *Remote) Fetch(ctx context.Context, name, dir string) (key, path string, err error) {
+// List returns the dumps in the bucket, newest first.
+func (r *Remote) List(ctx context.Context) ([]Dump, error) {
+	var out []Dump
+	it := r.bucket.List(&blob.ListOptions{Prefix: "nori-dump-"})
+	for {
+		obj, err := it.Next(ctx)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if dumpName.MatchString(obj.Key) {
+			out = append(out, Dump{Name: obj.Key, Size: obj.Size, ModTime: obj.ModTime})
+		}
+	}
+	// timestamps in the names sort lexicographically
+	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	return out, nil
+}
+
+// Fetch downloads a dump into dir as a plain .json.gz, decrypting an .age
+// dump with the passphrase. name is a dump name or "latest". It returns
+// the dump's name in the bucket and the local path.
+func (r *Remote) Fetch(ctx context.Context, name, dir string) (string, string, error) {
 	if name == "latest" {
-		objs, err := r.List(ctx)
+		dumps, err := r.List(ctx)
 		if err != nil {
 			return "", "", err
 		}
-		if len(objs) == 0 {
-			return "", "", fmt.Errorf("no dumps under %s", r.Target())
+		if len(dumps) == 0 {
+			return "", "", fmt.Errorf("no dumps in %s", r.Target)
 		}
-		name = strings.TrimPrefix(objs[0].Key, r.key(""))
+		name = dumps[0].Name
 	}
 	if !dumpName.MatchString(name) {
 		return "", "", fmt.Errorf("%q is not a dump name (nori-dump-*.json.gz[.age])", name)
 	}
-	key = r.key(name)
-	body, err := r.Client.Get(ctx, r.Bucket, key)
+	in, err := r.bucket.NewReader(ctx, name, nil)
 	if err != nil {
 		return "", "", err
-	}
-	defer body.Close()
-	path = filepath.Join(dir, name)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", "", err
-	}
-	if _, err := io.Copy(f, body); err != nil {
-		f.Close()
-		return "", "", err
-	}
-	if err := f.Close(); err != nil {
-		return "", "", err
-	}
-	if !strings.HasSuffix(path, ".age") {
-		return key, path, nil
-	}
-	plain := strings.TrimSuffix(path, ".age")
-	if err := DecryptFile(path, plain, r.Passphrase); err != nil {
-		return "", "", err
-	}
-	os.Remove(path)
-	return key, plain, nil
-}
-
-// EncryptFile writes src encrypted for passphrase (age, scrypt) to dst.
-func EncryptFile(src, dst, passphrase string) error {
-	rec, err := age.NewScryptRecipient(passphrase)
-	if err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
+	path := filepath.Join(dir, strings.TrimSuffix(name, ".age"))
+	if err := writeDecrypted(path, in, strings.HasSuffix(name, ".age"), r.Passphrase); err != nil {
+		return "", "", fmt.Errorf("%s: %w", name, err)
 	}
-	w, err := age.Encrypt(out, rec)
-	if err != nil {
-		out.Close()
-		return err
-	}
-	if _, err := io.Copy(w, in); err != nil {
-		out.Close()
-		return err
-	}
-	if err := w.Close(); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
+	return name, path, nil
 }
 
 // DecryptFile writes the age-encrypted src, decrypted with passphrase, to dst.
 func DecryptFile(src, dst, passphrase string) error {
-	if passphrase == "" {
-		return errors.New("the dump is encrypted: set NORI_BACKUP_PASSPHRASE")
-	}
-	id, err := age.NewScryptIdentity(passphrase)
-	if err != nil {
-		return err
-	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	r, err := age.Decrypt(in, id)
-	if err != nil {
-		return fmt.Errorf("decrypt %s: %w (wrong passphrase?)", filepath.Base(src), err)
+	if err := writeDecrypted(dst, in, true, passphrase); err != nil {
+		return fmt.Errorf("%s: %w", filepath.Base(src), err)
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	return nil
+}
+
+func writeDecrypted(path string, src io.Reader, encrypted bool, passphrase string) error {
+	if encrypted {
+		if passphrase == "" {
+			return errors.New("the dump is encrypted: set NORI_BACKUP_PASSPHRASE")
+		}
+		id, err := age.NewScryptIdentity(passphrase)
+		if err != nil {
+			return err
+		}
+		if src, err = age.Decrypt(src, id); err != nil {
+			return fmt.Errorf("decrypt: %w (wrong passphrase?)", err)
+		}
+	}
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, r); err != nil {
+	if _, err := io.Copy(out, src); err != nil {
 		out.Close()
-		os.Remove(dst)
-		return fmt.Errorf("decrypt %s: %w", filepath.Base(src), err)
+		os.Remove(path)
+		return err
 	}
 	return out.Close()
 }

@@ -89,28 +89,35 @@ A raw copy of `data.db` is only safe while the server is stopped; use dumps for 
 
 ### Offsite copies
 
-`-backup-remote s3://bucket/prefix` uploads every dump (scheduled, Back up now, shutdown) to S3-compatible storage: Cloudflare R2, Backblaze B2, AWS S3, Tigris, MinIO. After each upload nori checks the stored size, then deletes the oldest remote dumps beyond `-backup-remote-keep` (default: same as `-backup-keep`; `0` leaves pruning to the bucket's lifecycle rules). A failed upload is retried with the next dump and never prunes.
+`-backup-remote <bucket URL>` uploads every dump (scheduled, Back up now, shutdown) to a bucket on S3-compatible storage (Cloudflare R2, Backblaze B2, AWS S3, Tigris, MinIO) or to a `file://` directory such as a second disk. After each upload nori checks the stored size. A failed upload is retried with the next dump. nori never deletes remote dumps: set a lifecycle rule on the bucket (for example, delete after 30 days).
 
 ```sh
-export NORI_BACKUP_ACCESS_KEY_ID=...        # credentials: environment only
-export NORI_BACKUP_SECRET_ACCESS_KEY=...
-export NORI_BACKUP_PASSPHRASE=...           # optional: encrypt dumps before upload
-nori -data ./data -backup-remote s3://nori-backups/prod \
-  -backup-endpoint https://<account>.r2.cloudflarestorage.com
+export AWS_ACCESS_KEY_ID=...            # the standard AWS variables; environment only
+export AWS_SECRET_ACCESS_KEY=...
+export NORI_BACKUP_PASSPHRASE=...       # optional: encrypt dumps before upload
+nori -data ./data -backup-remote 's3://nori-backups?prefix=prod/&endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true'
 ```
 
-- **Endpoint and region.** R2: `https://<account>.r2.cloudflarestorage.com`, region `auto` (the default). B2: `https://s3.<region>.backblazeb2.com` with `-backup-region <region>`. AWS S3: leave the endpoint empty and set `-backup-region`. Requests use path-style URLs.
-- **Key permissions.** Read, write, list and delete objects in the bucket; nothing on the account. On R2 that is an API token with Object Read & Write, scoped to the bucket.
+| Storage | Bucket URL |
+|---|---|
+| Cloudflare R2 | `s3://<bucket>?prefix=prod/&endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true` |
+| Backblaze B2 | `s3://<bucket>?prefix=prod/&endpoint=https://s3.<region>.backblazeb2.com&region=<region>&use_path_style=true` |
+| AWS S3 | `s3://<bucket>?prefix=prod/&region=<region>` |
+| MinIO | `s3://<bucket>?prefix=prod/&endpoint=http://<host>:9000&region=us-east-1&use_path_style=true` |
+| A directory | `file:///mnt/backups?prefix=prod/` |
+
+- **URL options** are those of [gocloud.dev/blob](https://gocloud.dev/howto/blob/); nori adds `request_checksum_calculation=when_required` and `response_checksum_validation=when_required` to `s3://` URLs unless the URL sets them.
+- **Key permissions.** Read, write and list objects in the bucket; nothing on the account. On R2 that is an API token with Object Read & Write, scoped to the bucket.
 - **Local copies are optional.** With `-backup-dir`, dumps stay there as before and are also uploaded. Without it, dumps are staged in `<data>.backup-staging` and removed once uploaded.
 - **Encryption.** With `NORI_BACKUP_PASSPHRASE` set, dumps are encrypted with [age](https://age-encryption.org) (passphrase) and stored as `.json.gz.age`. They decrypt with nori or the standard `age -d`. Losing the passphrase loses the backups.
 - **Status.** `GET /api/status` (and the Dashboard's "offsite" item) shows the target, the last verified upload and the last upload error. With `-backup-remote`, Back up now returns once the dump is uploaded.
-- **Fly.io.** Set the flags as environment variables in `fly.toml` (`NORI_BACKUP_REMOTE`, `NORI_BACKUP_ENDPOINT`, `NORI_BACKUP_REGION` under `[env]`) and the credentials and passphrase with `fly secrets set`.
+- **Fly.io.** Set `NORI_BACKUP_REMOTE` under `[env]` in `fly.toml`, and the keys and passphrase with `fly secrets set`.
 
-List and restore remote dumps (same flags and environment):
+List and restore remote dumps (`-remote` defaults to `-backup-remote`, so with `NORI_BACKUP_REMOTE` set it can be left out):
 
 ```sh
-nori backups -remote s3://nori-backups/prod -endpoint https://<account>.r2.cloudflarestorage.com
-nori restore -data ./data -remote s3://nori-backups/prod -endpoint https://<account>.r2.cloudflarestorage.com -dump latest
+nori backups -remote '<bucket URL>'
+nori restore -data ./data -remote '<bucket URL>' -dump latest
 ```
 
 `-dump` takes `latest` or a name from `nori backups`. A local `.age` file restores with `nori restore -dump ./nori-dump-....json.gz.age` and the passphrase in `NORI_BACKUP_PASSPHRASE`.
