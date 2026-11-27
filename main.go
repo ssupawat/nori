@@ -52,6 +52,7 @@ func main() {
 	backupDir := flag.String("backup-dir", "", "directory for scheduled JSON dumps (empty = disabled)")
 	backupEvery := flag.Duration("backup-every", 24*time.Hour, "time between scheduled dumps")
 	backupKeep := flag.Int("backup-keep", 7, "number of scheduled dumps to keep")
+	backupRemote := flag.String("backup-remote", envOr("NORI_BACKUP_REMOTE", ""), "upload dumps to this bucket URL, e.g. s3://bucket?prefix=prod/&endpoint=...&region=auto&use_path_style=true (empty = off)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
@@ -67,7 +68,9 @@ func main() {
 		rest := flag.Args()[1:]
 		switch sub {
 		case "restore":
-			os.Exit(runRestoreCmd(rest, *dataDir))
+			os.Exit(runRestoreCmd(rest, *dataDir, *backupRemote))
+		case "backups":
+			os.Exit(runBackupsCmd(rest, *backupRemote))
 		case "check":
 			os.Exit(runCheckCmd(rest, *dataDir))
 		case "compact":
@@ -98,52 +101,121 @@ func main() {
 	}
 
 	startedAt := time.Now()
-	// last scheduled/shutdown dump outcome, surfaced by GET /api/status
-	var backupMu sync.Mutex
-	var lastBackupAt time.Time
-	var lastBackupPath, lastBackupErr string
-	recordDump := func(path string, err error) {
-		backupMu.Lock()
-		lastBackupAt, lastBackupPath, lastBackupErr = time.Now(), path, ""
+
+	var remote *backup.Remote
+	if *backupRemote != "" {
+		remote, err = openRemote(context.Background(), *backupRemote)
 		if err != nil {
-			lastBackupErr = err.Error()
+			log.Fatalf("remote backups: %v", err)
+		}
+		defer remote.Close()
+	}
+	// dumps go to -backup-dir; with only a remote, they are staged next to
+	// the data dir and removed once uploaded
+	localDir, staging := *backupDir, false
+	if localDir == "" && remote != nil {
+		localDir, staging = filepath.Clean(*dataDir)+".backup-staging", true
+	}
+
+	// last dump and upload outcomes, surfaced by GET /api/status
+	var backupMu sync.Mutex
+	var lastBackupAt, lastUploadAt time.Time
+	var lastBackupPath, lastBackupErr, lastUploadKey, lastUploadErr string
+	// dumpMu serializes whole backups (dump and upload) across the
+	// schedule, Back up now and shutdown
+	var dumpMu sync.Mutex
+	errText := func(err error) string {
+		if err == nil {
+			return ""
+		}
+		return err.Error()
+	}
+	runBackup := func(ctx context.Context) (string, string, error) {
+		dumpMu.Lock()
+		defer dumpMu.Unlock()
+		path, err := dumpJSON(s, localDir, *backupKeep)
+		backupMu.Lock()
+		lastBackupAt, lastBackupPath, lastBackupErr = time.Now(), path, errText(err)
+		backupMu.Unlock()
+		if err != nil || remote == nil {
+			return path, "", err
+		}
+		key, err := remote.Ship(ctx, path)
+		backupMu.Lock()
+		lastUploadErr = errText(err)
+		if err == nil {
+			lastUploadAt, lastUploadKey = time.Now(), key
 		}
 		backupMu.Unlock()
+		if err == nil && staging {
+			// remove staged dumps, including ones left by failed uploads
+			staged, _ := filepath.Glob(filepath.Join(localDir, "nori-dump-*.json.gz"))
+			for _, f := range staged {
+				os.Remove(f)
+			}
+		}
+		return path, key, err
+	}
+	logBackup := func(when, path, key string, err error) {
+		switch {
+		case path == "":
+			log.Printf("backup failed (%s): %v", when, err)
+		case err != nil:
+			log.Printf("backup written (%s): %s; upload to %s failed: %v", when, path, remote.Target, err)
+		case remote != nil:
+			log.Printf("backup written (%s) and uploaded: %s in %s", when, key, remote.Target)
+		default:
+			log.Printf("backup written (%s): %s", when, path)
+		}
 	}
 
 	// scheduled logical dumps (safe while serving traffic): every interval,
 	// and once more on shutdown
-	if *backupDir != "" {
+	if localDir != "" {
 		// seed "last dump" from the newest file already in the dir, so
 		// /api/status is accurate right after a restart
-		if entries, err := os.ReadDir(*backupDir); err == nil {
+		if entries, err := os.ReadDir(localDir); err == nil {
 			for _, e := range entries {
 				name := e.Name()
 				if e.IsDir() || !strings.HasPrefix(name, "nori-dump-") || !strings.HasSuffix(name, ".json.gz") {
 					continue
 				}
 				if info, err := e.Info(); err == nil && info.ModTime().After(lastBackupAt) {
-					lastBackupAt, lastBackupPath = info.ModTime(), filepath.Join(*backupDir, name)
+					lastBackupAt, lastBackupPath = info.ModTime(), filepath.Join(localDir, name)
 				}
 			}
 		}
-		dump := func(when string) {
-			path, err := dumpJSON(s, *backupDir, *backupKeep)
-			recordDump(path, err)
-			if err != nil {
-				log.Printf("scheduled backup failed (%s): %v", when, err)
-				return
-			}
-			log.Printf("backup written (%s): %s", when, path)
+		if remote != nil {
+			// seed "last upload" from the newest remote dump
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				dumps, err := remote.List(ctx)
+				backupMu.Lock()
+				defer backupMu.Unlock()
+				if !lastUploadAt.IsZero() {
+					return
+				}
+				if err != nil {
+					lastUploadErr = "list " + remote.Target + ": " + err.Error()
+					log.Printf("remote backups: %s", lastUploadErr)
+					return
+				}
+				if len(dumps) > 0 {
+					lastUploadAt, lastUploadKey = dumps[0].ModTime, dumps[0].Key
+				}
+			}()
 		}
 		go func() {
 			ticker := time.NewTicker(*backupEvery)
 			defer ticker.Stop()
 			for range ticker.C {
-				dump("interval")
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+				path, key, err := runBackup(ctx)
+				cancel()
+				logBackup("interval", path, key, err)
 			}
 		}()
-
 	}
 
 	a, err := auth.Open(s.DB())
@@ -193,32 +265,36 @@ func main() {
 			DataBytes:     api.DirSize(*dataDir),
 			DiskFreeBytes: api.DiskFree(*dataDir),
 		}
-		if *backupDir != "" {
+		if localDir != "" {
 			backupMu.Lock()
 			st.Backup = &api.BackupStatus{
-				Dir:          *backupDir,
+				Dir:          localDir,
 				EverySeconds: int64((*backupEvery).Seconds()),
 				LastAt:       api.SinceRFC3339(lastBackupAt),
 				LastPath:     lastBackupPath,
 				LastError:    lastBackupErr,
 			}
+			if remote != nil {
+				st.Backup.Remote = &api.RemoteBackupStatus{
+					Target:       remote.Target,
+					Encrypted:    remote.Passphrase != "",
+					LastUploadAt: api.SinceRFC3339(lastUploadAt),
+					LastKey:      lastUploadKey,
+					LastError:    lastUploadErr,
+				}
+			}
 			backupMu.Unlock()
 		}
 		return st
-	}).WithBackupNow(func() (string, error) {
-		// serialized with the scheduled dumps through backupMu, so two
-		// triggers never write (or prune) at the same time
-		backupMu.Lock()
-		defer backupMu.Unlock()
-		if *backupDir == "" {
-			return "", errors.New("backups are disabled - start with -backup-dir")
+	}).WithBackupNow(func() (api.BackupResult, error) {
+		if localDir == "" {
+			return api.BackupResult{}, errors.New("backups are disabled - start with -backup-dir or -backup-remote")
 		}
-		path, err := dumpJSON(s, *backupDir, *backupKeep)
-		lastBackupAt, lastBackupPath, lastBackupErr = time.Now(), path, ""
-		if err != nil {
-			lastBackupErr = err.Error()
-		}
-		return path, err
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		path, key, err := runBackup(ctx)
+		logBackup("manual", path, key, err)
+		return api.BackupResult{Path: path, RemoteKey: key}, err
 	})
 	r.Get("/llms.txt", apiSrv.LLMsTxt)
 	r.Get("/openapi.json", apiSrv.OpenAPISpec)
@@ -239,13 +315,13 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
-	// drained: in-flight requests are done, now it is safe to dump
-	if *backupDir != "" {
-		path, err := dumpJSON(s, *backupDir, *backupKeep)
-		recordDump(path, err)
-		if err == nil {
-			log.Printf("backup written (shutdown): %s", path)
-		}
+	// drained: in-flight requests are done, now it is safe to dump; the
+	// upload gets what is left of the stop window, best effort
+	if localDir != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		path, key, err := runBackup(ctx)
+		cancel()
+		logBackup("shutdown", path, key, err)
 	}
 }
 
@@ -279,24 +355,107 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// runRestoreCmd implements `nori restore`: rebuild a data dir from a
-// scheduled dump. It only writes into an empty data dir, so the intended
-// flow is: stop the server, move the old data dir away, restore, start.
-func runRestoreCmd(args []string, inheritData string) int {
-	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
-	dataDir := fs.String("data", inheritData, "data directory to build")
-	dumpPath := fs.String("dump", "", "dump file to restore from (nori-dump-*.json.gz)")
+func openRemote(ctx context.Context, target string) (*backup.Remote, error) {
+	return backup.OpenRemote(ctx, target, os.Getenv("NORI_BACKUP_PASSPHRASE"))
+}
+
+// runBackupsCmd implements `nori backups`: list the remote dumps, newest
+// first.
+func runBackupsCmd(args []string, inheritRemote string) int {
+	fs := flag.NewFlagSet("backups", flag.ContinueOnError)
+	target := fs.String("remote", inheritRemote, "bucket URL, as for -backup-remote")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *dumpPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: nori restore -data ./data -dump ./backups/nori-dump-....json.gz")
+	if *target == "" {
+		fmt.Fprintln(os.Stderr, "usage: nori backups -remote <bucket URL>")
 		return 2
 	}
-	if _, err := os.Stat(*dumpPath); err != nil {
-		fmt.Fprintf(os.Stderr, "dump not found: %s\n", *dumpPath)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	remote, err := openRemote(ctx, *target)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	defer remote.Close()
+	dumps, err := remote.List(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "list %s: %v\n", *target, err)
+		return 1
+	}
+	if len(dumps) == 0 {
+		fmt.Printf("no dumps in %s\n", *target)
+	}
+	for _, d := range dumps {
+		fmt.Printf("%s  %10d  %s\n", d.ModTime.UTC().Format(time.RFC3339), d.Size, d.Key)
+	}
+	return 0
+}
+
+// restoreSource returns a local plain dump for `nori restore` and where it
+// came from. A dump that exists as a local file is used as is (decrypted
+// when it ends in .age); "latest" or any other name is fetched from the
+// remote. cleanup removes temporary files.
+func restoreSource(dump, target string) (path, source string, cleanup func(), err error) {
+	tmp, err := os.MkdirTemp("", "nori-restore-")
+	if err != nil {
+		return "", "", nil, err
+	}
+	cleanup = func() { os.RemoveAll(tmp) }
+	fail := func(err error) (string, string, func(), error) {
+		cleanup()
+		return "", "", nil, err
+	}
+	if _, statErr := os.Stat(dump); statErr == nil {
+		if filepath.Ext(dump) != ".age" {
+			return dump, dump, cleanup, nil
+		}
+		plain := filepath.Join(tmp, strings.TrimSuffix(filepath.Base(dump), ".age"))
+		if err := backup.DecryptFile(dump, plain, os.Getenv("NORI_BACKUP_PASSPHRASE")); err != nil {
+			return fail(err)
+		}
+		return plain, dump, cleanup, nil
+	}
+	if target == "" {
+		return fail(fmt.Errorf("dump not found: %s", dump))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	remote, err := openRemote(ctx, target)
+	if err != nil {
+		return fail(err)
+	}
+	defer remote.Close()
+	name, path, err := remote.Fetch(ctx, dump, tmp)
+	if err != nil {
+		return fail(err)
+	}
+	return path, name + " in " + target, cleanup, nil
+}
+
+// runRestoreCmd implements `nori restore`: rebuild a data dir from a
+// scheduled dump. It only writes into an empty data dir, so the intended
+// flow is: stop the server, move the old data dir away, restore, start.
+func runRestoreCmd(args []string, inheritData, inheritRemote string) int {
+	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
+	dataDir := fs.String("data", inheritData, "data directory to build")
+	dumpArg := fs.String("dump", "", "dump file to restore from (nori-dump-*.json.gz[.age]); with -remote, a dump name or latest")
+	remoteTarget := fs.String("remote", inheritRemote, "bucket URL, as for -backup-remote")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *dumpArg == "" {
+		fmt.Fprintln(os.Stderr, "usage: nori restore -data ./data -dump ./backups/nori-dump-....json.gz")
+		fmt.Fprintln(os.Stderr, "       nori restore -data ./data -remote <bucket URL> -dump latest")
+		return 2
+	}
+	dumpPath, source, cleanup, err := restoreSource(*dumpArg, *remoteTarget)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer cleanup()
 	s, err := store.Open(*dataDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open store: %v\n", err)
@@ -312,7 +471,7 @@ func runRestoreCmd(args []string, inheritData string) int {
 		fmt.Fprintf(os.Stderr, "data dir %s is not empty; move it away first (restore never mixes with live data)\n", *dataDir)
 		return 1
 	}
-	counts, err := backup.RestoreJSON(s.DB(), *dumpPath)
+	counts, err := backup.RestoreJSON(s.DB(), dumpPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "restore failed: %v\n", err)
 		return 1
@@ -321,7 +480,7 @@ func runRestoreCmd(args []string, inheritData string) int {
 	for name, n := range counts {
 		names = append(names, fmt.Sprintf("%s (%d docs)", name, n))
 	}
-	fmt.Printf("restored from %s:\n  %s\n", *dumpPath, strings.Join(names, "\n  "))
+	fmt.Printf("restored from %s:\n  %s\n", source, strings.Join(names, "\n  "))
 	return 0
 }
 

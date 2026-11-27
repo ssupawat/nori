@@ -2,6 +2,8 @@
 # never scale past one machine, since two machines cannot share a volume.
 app = "nori-change-me"
 primary_region = "sin"
+# Time for the shutdown dump (and its upload) before the machine stops.
+kill_timeout = 60
 
 [build]
 
@@ -9,6 +11,8 @@ primary_region = "sin"
   # Go heap ceiling: the GC fights here before the kernel OOM-kills.
   # Must match the machine's RAM minus OS/Fly overhead (~100MB).
   GOMEMLIMIT = "900MiB"
+  # Offsite copies (docs/deploy.md); keys and passphrase via fly secrets set.
+  # NORI_BACKUP_REMOTE = "s3://nori-backups?prefix=prod/&endpoint=https://<account>.r2.cloudflarestorage.com&region=auto&use_path_style=true"
 
 [mounts]
   source = "nori_data"

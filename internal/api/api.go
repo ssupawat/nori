@@ -31,8 +31,9 @@ type Server struct {
 	// statusProvider fills GET /api/status; main installs a closure over
 	// its version, uptime, data dir and backup state
 	statusProvider func() *Status
-	// backupNow runs an immediate dump; nil or failing when -backup-dir is off
-	backupNow func() (string, error)
+	// backupNow runs an immediate dump (and upload); nil or failing when
+	// backups are off
+	backupNow func() (BackupResult, error)
 	// importMu serializes imports: two concurrent mode=replace imports on
 	// the same table would race on the shared staging collection
 	importMu sync.Mutex
@@ -103,7 +104,7 @@ func (sv *Server) WithStatus(fn func() *Status) *Server {
 }
 
 // WithBackupNow installs the immediate-dump action behind POST /api/backup.
-func (sv *Server) WithBackupNow(fn func() (string, error)) *Server {
+func (sv *Server) WithBackupNow(fn func() (BackupResult, error)) *Server {
 	sv.backupNow = fn
 	return sv
 }
