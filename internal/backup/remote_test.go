@@ -102,7 +102,7 @@ func TestRemoteEncryptedRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ship: %v", err)
 	}
-	got, err := r.Fetch(ctx, "latest", t.TempDir())
+	fetchedKey, got, err := r.Fetch(ctx, "latest", t.TempDir())
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -115,17 +115,20 @@ func TestRemoteEncryptedRoundTrip(t *testing.T) {
 	if _, err := os.Stat(path + ".age"); !os.IsNotExist(err) {
 		t.Fatalf("encrypted temp file left behind: %v", err)
 	}
+	if fetchedKey != key {
+		t.Fatalf("fetched key %s, shipped %s", fetchedKey, key)
+	}
 	if b, _ := os.ReadFile(got); string(b) != content || strings.HasSuffix(got, ".age") {
 		t.Fatalf("fetched %s = %q", got, b)
 	}
 
 	// Act + Assert: a wrong or missing passphrase cannot fetch it.
 	r.Passphrase = "wrong"
-	if _, err := r.Fetch(ctx, "latest", t.TempDir()); err == nil || !strings.Contains(err.Error(), "wrong passphrase") {
+	if _, _, err := r.Fetch(ctx, "latest", t.TempDir()); err == nil || !strings.Contains(err.Error(), "wrong passphrase") {
 		t.Fatalf("fetch with wrong passphrase: %v", err)
 	}
 	r.Passphrase = ""
-	if _, err := r.Fetch(ctx, "latest", t.TempDir()); err == nil || !strings.Contains(err.Error(), "NORI_BACKUP_PASSPHRASE") {
+	if _, _, err := r.Fetch(ctx, "latest", t.TempDir()); err == nil || !strings.Contains(err.Error(), "NORI_BACKUP_PASSPHRASE") {
 		t.Fatalf("fetch without passphrase: %v", err)
 	}
 }
@@ -144,7 +147,7 @@ func TestRemoteFetchByName(t *testing.T) {
 	}
 
 	// Act + Assert: an older dump by name.
-	got, err := r.Fetch(ctx, "nori-dump-20261101-010000.000000001.json.gz", t.TempDir())
+	_, got, err := r.Fetch(ctx, "nori-dump-20261101-010000.000000001.json.gz", t.TempDir())
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -154,7 +157,7 @@ func TestRemoteFetchByName(t *testing.T) {
 
 	// Act + Assert: names that are not dumps are refused before any request.
 	for _, bad := range []string{"../etc/passwd", "notes.txt", ""} {
-		if _, err := r.Fetch(ctx, bad, t.TempDir()); err == nil {
+		if _, _, err := r.Fetch(ctx, bad, t.TempDir()); err == nil {
 			t.Errorf("fetch %q accepted", bad)
 		}
 	}

@@ -118,9 +118,9 @@ func restoreSource(dump, target, endpoint, region string) (path, source string, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
-	path, err = remote.Fetch(ctx, dump, tmp)
+	key, path, err := remote.Fetch(ctx, dump, tmp)
 	if err != nil {
 		return fail(err)
 	}
-	return path, remote.Target() + "/" + filepath.Base(path), cleanup, nil
+	return path, "s3://" + remote.Bucket + "/" + key, cleanup, nil
 }

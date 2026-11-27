@@ -128,49 +128,50 @@ func (r *Remote) prune(ctx context.Context) error {
 	return nil
 }
 
-// Fetch downloads a remote dump into dir and returns the path of a plain
-// .json.gz, decrypting an .age dump with the passphrase. name is a dump
-// file name or "latest".
-func (r *Remote) Fetch(ctx context.Context, name, dir string) (string, error) {
+// Fetch downloads a remote dump into dir and returns its object key and
+// the path of a plain .json.gz, decrypting an .age dump with the
+// passphrase. name is a dump file name or "latest".
+func (r *Remote) Fetch(ctx context.Context, name, dir string) (key, path string, err error) {
 	if name == "latest" {
 		objs, err := r.List(ctx)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if len(objs) == 0 {
-			return "", fmt.Errorf("no dumps under %s", r.Target())
+			return "", "", fmt.Errorf("no dumps under %s", r.Target())
 		}
 		name = strings.TrimPrefix(objs[0].Key, r.key(""))
 	}
 	if !dumpName.MatchString(name) {
-		return "", fmt.Errorf("%q is not a dump name (nori-dump-*.json.gz[.age])", name)
+		return "", "", fmt.Errorf("%q is not a dump name (nori-dump-*.json.gz[.age])", name)
 	}
-	body, err := r.Client.Get(ctx, r.Bucket, r.key(name))
+	key = r.key(name)
+	body, err := r.Client.Get(ctx, r.Bucket, key)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer body.Close()
-	path := filepath.Join(dir, name)
+	path = filepath.Join(dir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if _, err := io.Copy(f, body); err != nil {
 		f.Close()
-		return "", err
+		return "", "", err
 	}
 	if err := f.Close(); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if !strings.HasSuffix(path, ".age") {
-		return path, nil
+		return key, path, nil
 	}
 	plain := strings.TrimSuffix(path, ".age")
 	if err := DecryptFile(path, plain, r.Passphrase); err != nil {
-		return "", err
+		return "", "", err
 	}
 	os.Remove(path)
-	return plain, nil
+	return key, plain, nil
 }
 
 // EncryptFile writes src encrypted for passphrase (age, scrypt) to dst.
